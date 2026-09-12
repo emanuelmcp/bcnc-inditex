@@ -22,9 +22,11 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 9. [Cómo ejecutar el proyecto](#cómo-ejecutar-el-proyecto)
 10. [Base de datos H2](#base-de-datos-h2)
 11. [Documentación OpenAPI / Swagger](#documentación-openapi--swagger)
-12. [Estrategia de testing](#estrategia-de-testing)
-13. [Estructura del proyecto](#estructura-del-proyecto)
-14. [Decisiones de diseño](#decisiones-de-diseño)
+12. [Observabilidad: Actuator](#observabilidad-actuator)
+13. [Docker y despliegue](#docker-y-despliegue)
+14. [Estrategia de testing](#estrategia-de-testing)
+15. [Estructura del proyecto](#estructura-del-proyecto)
+16. [Decisiones de diseño](#decisiones-de-diseño)
 
 ---
 
@@ -41,16 +43,18 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 
 ## Stack técnico
 
-| Componente         | Detalle                                   |
-|---------------------|--------------------------------------------|
-| Lenguaje            | Java 25                                    |
-| Framework           | Spring Boot 4.1.1 (`spring-boot-starter-webmvc`) |
-| Persistencia        | Spring Data JPA + Hibernate                |
-| Base de datos       | H2 (en memoria)                            |
-| Documentación API   | springdoc-openapi (Swagger UI)             |
-| Testing             | JUnit 5, Mockito, MockMvc, Spring Boot Test|
-| Build               | Maven (wrapper incluido, `mvnw`)           |
-| Reducción de boilerplate | Lombok                                |
+| Componente               | Detalle                                          |
+|----------------------------|----------------------------------------------------|
+| Lenguaje                   | Java 25                                             |
+| Framework                  | Spring Boot 4.1.1 (`spring-boot-starter-webmvc`)   |
+| Persistencia                | Spring Data JPA + Hibernate                         |
+| Base de datos               | H2 (en memoria)                                     |
+| Documentación API           | springdoc-openapi (Swagger UI)                      |
+| Observabilidad              | Spring Boot Actuator                                |
+| Testing                     | JUnit 5, Mockito, MockMvc, Spring Boot Test         |
+| Build                       | Maven (wrapper incluido, `mvnw`)                    |
+| Empaquetado                 | Docker (multi-stage build) + Docker Compose         |
+| Reducción de boilerplate    | Lombok                                              |
 
 ## Arquitectura
 
@@ -90,11 +94,11 @@ flowchart TB
 
     Controller --> DtoIn
     Controller --> UseCasePort
-    UseCasePort -.implementa.- Service
+    UseCasePort -. implementa .-> Service
     Service --> Resolver
     Service --> RepoPort
     Resolver --> Models
-    RepoPort -.implementa.- Adapter
+    RepoPort -. implementa .-> Adapter
     Adapter --> Jpa
     Adapter --> EntityMapper
     Jpa --> Entity
@@ -157,9 +161,9 @@ sequenceDiagram
     Service->>Repo: findCandidates(brandId, productId, applicationDate)
     Repo->>DB: SELECT ... WHERE brand_id=? AND product_id=?<br/>AND start_date<=? AND end_date>=?
     DB-->>Repo: filas candidatas (ya acotadas por índice)
-    Repo-->>Service: List<Price> (mapeadas a dominio)
+    Repo-->>Service: List&lt;Price&gt; (mapeadas a dominio)
     Service->>Resolver: resolveApplicablePrice(fecha, candidatos)
-    Resolver-->>Service: Optional<Price> (mayor PRIORITY)
+    Resolver-->>Service: Optional&lt;Price&gt; (mayor PRIORITY)
     alt precio encontrado
         Service-->>Controller: Price
         Controller-->>Client: 200 OK + PriceResponseDto
@@ -272,6 +276,98 @@ Ejecutar la suite de tests:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Especificación OpenAPI: `http://localhost:8080/v3/api-docs`
 
+## Observabilidad: Actuator
+
+El proyecto expone Spring Boot Actuator para monitorización básica del
+servicio:
+
+| Endpoint                    | Descripción                                    |
+|-------------------------------|---------------------------------------------------|
+| `GET /actuator/health`        | Estado de la aplicación y de sus componentes (incluye el estado de la conexión a H2) |
+| `GET /actuator/info`          | Metadatos estáticos de la aplicación (nombre, descripción) |
+
+Configuración relevante en `application.yaml`:
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+```
+
+> **Nota**: los endpoints de Actuator quedan fuera del prefijo `/api`, ya que
+> `ApiConfig` solo aplica ese prefijo a clases anotadas con `@RestController`,
+> y Actuator registra sus endpoints por su propio mecanismo de
+> autoconfiguración. Esto es intencional y es la práctica habitual: los
+> health checks de orquestadores (Docker, Kubernetes) y de balanceadores de
+> carga esperan encontrarlos en una ruta estable y separada de la API de
+> negocio.
+
+Cubierto por test de integración en `ActuatorHealthIntegrationTest`, que
+verifica que `status` es `UP` a nivel global y que el componente `db`
+(la conexión a H2) también reporta `UP`.
+
+## Docker y despliegue
+
+El proyecto incluye una imagen Docker de dos etapas (*multi-stage build*)
+para minimizar el tamaño final de la imagen y no distribuir el JDK completo
+ni el código fuente en producción.
+
+```mermaid
+flowchart LR
+    subgraph S1["Etapa 1: build (amazoncorretto:25)"]
+        A["Código fuente + pom.xml"] --> B["./mvnw package"]
+        B --> C["bcnc-inditex-*.jar"]
+    end
+    subgraph S2["Etapa 2: runtime (amazoncorretto:25-alpine)"]
+        D["Usuario no-root 'spring'"] --> E["Solo el .jar ejecutable"]
+        E --> F["java -jar app.jar"]
+    end
+    C -->|"COPY --from=builder"| E
+```
+
+**Ficheros entregados** (por diseño, no llevan el nombre final para que se
+revisen antes de aplicarlos):
+
+- `docker.txt` → contenido a copiar en un fichero `Dockerfile` en la raíz del
+  proyecto.
+- `docker-compose.yml` → orquesta la construcción y el arranque del
+  contenedor; asume que el `Dockerfile` ya existe con ese nombre exacto en la
+  raíz (referenciado como `dockerfile: Dockerfile` dentro del compose).
+
+Características del `Dockerfile`:
+
+- **Build multi-stage**: la etapa de compilación usa `amazoncorretto:25`
+  completo (incluye JDK + Maven vía `mvnw`); la etapa final usa
+  `amazoncorretto:25-alpine`, mucho más ligera, y solo contiene el `.jar`
+  final.
+- **Usuario no-root** (`spring`) para ejecutar la aplicación dentro del
+  contenedor, siguiendo buenas prácticas de seguridad.
+- **`HEALTHCHECK` nativo de Docker** apuntando a `/actuator/health`, de forma
+  que `docker ps` y `docker compose` puedan reportar el estado real del
+  servicio, no solo si el proceso sigue vivo.
+- **`JAVA_OPTS` configurable** por variable de entorno, para poder ajustar
+  memoria (`-Xms`/`-Xmx`) sin reconstruir la imagen.
+
+Uso:
+
+```bash
+# 1. Copiar el contenido de docker.txt a un fichero llamado "Dockerfile" en la raíz
+# 2. Construir y levantar el servicio
+docker compose up --build
+```
+
+La aplicación queda expuesta en `http://localhost:8080` igual que en local,
+incluyendo Swagger UI, la consola H2 y `/actuator/health`.
+
+> Como la base de datos es H2 en memoria (requisito del enunciado), los datos
+> se reinicializan desde `data.sql` cada vez que se reinicia el contenedor —
+> es el comportamiento esperado y buscado, no una limitación del empaquetado.
+
 ## Estrategia de testing
 
 ```mermaid
@@ -289,17 +385,19 @@ flowchart TD
         T6["PriceResponseMapperTest"]
         T7["PriceRepositoryH2AdapterTest<br/>(mockea JpaPriceRepository)"]
     end
-    subgraph Integracion["Test de integración end-to-end"]
+    subgraph Integracion["Tests de integración end-to-end"]
         T8["PriceControllerTest<br/>@SpringBootTest + MockMvc + H2 real"]
+        T9["ActuatorHealthIntegrationTest<br/>@SpringBootTest + MockMvc"]
     end
 
     Dominio --> Aplicacion --> Infra --> Integracion
 ```
 
-60 tests en total, 0 fallos. La lógica de negocio (resolución de prioridad,
-invariantes de los Value Objects) está cubierta por tests unitarios puros que
-no dependen de Spring ni de una base de datos; el comportamiento HTTP
-observable end-to-end está cubierto por `PriceControllerTest`.
+La lógica de negocio (resolución de prioridad, invariantes de los Value
+Objects) está cubierta por tests unitarios puros que no dependen de Spring ni
+de una base de datos; el comportamiento HTTP observable end-to-end —
+incluyendo el health check— está cubierto por tests de integración con
+`MockMvc`.
 
 ## Estructura del proyecto
 
@@ -319,6 +417,9 @@ src/main/java/io/github/emanuelmcp/bcnc_inditex/
         ├── adapters/in/           # PriceController + DTOs
         ├── adapters/out/          # JPA entity, repository, adapter H2
         └── config/                # PriceBeanLoader (wiring manual del dominio)
+
+docker.txt            # Contenido para el Dockerfile (build multi-stage)
+docker-compose.yml     # Orquestación local del contenedor
 ```
 
 ## Decisiones de diseño
@@ -339,3 +440,7 @@ src/main/java/io/github/emanuelmcp/bcnc_inditex/
 - **Beans de dominio cableados manualmente** (`PriceBeanLoader`) en lugar de
   `@Service`/`@Component` sobre las clases de dominio, para que el paquete
   `domain` no tenga ninguna dependencia de Spring.
+- **Actuator separado de `/api`**: los endpoints de monitorización no
+  comparten prefijo con la API de negocio, para que orquestadores y
+  balanceadores puedan apuntar a una ruta de health check estable e
+  independiente de futuras versiones de la API (`/api/v2/...`, etc.).
