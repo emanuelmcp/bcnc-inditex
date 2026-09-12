@@ -3,6 +3,9 @@ spring:
     url: jdbc:h2:mem:bcnc-test-db
   jpa:
     show-sql: false
+  sql:
+    init:
+      data-locations: classpath:data.sql, classpath:test-prices.sql
 management:
   endpoint:
     health:
