@@ -68,7 +68,7 @@ implementa los puertos definidos por el dominio.
 ```mermaid
 flowchart TB
   subgraph IN["Adaptadores de entrada (in)"]
-    Controller["PriceController<br/>@RestController /api/prices"]
+    Controller["PriceController<br/>@RestController /api/v1/prices"]
     DtoIn["PriceResponseDto / PriceResponseMapper"]
   end
 
@@ -158,7 +158,7 @@ sequenceDiagram
     participant Repo as PriceRepositoryH2Adapter
     participant DB as H2 (tabla PRICES)
 
-    Client->>Controller: GET /api/prices?applicationDate&productId&brandId
+    Client->>Controller: GET /api/v1/prices?applicationDate&productId&brandId
     Controller->>Service: findApplicablePrice(query)
     Service->>Repo: findCandidates(brandId, productId, applicationDate)
     Repo->>DB: SELECT ... WHERE brand_id=? AND product_id=?<br/>AND start_date<=? AND end_date>=?
@@ -194,7 +194,7 @@ flowchart LR
 ## Endpoint REST
 
 ```
-GET /api/prices?applicationDate={ISO_LOCAL_DATE_TIME}&productId={long}&brandId={int}
+GET /api/v1/prices?applicationDate={ISO_LOCAL_DATE_TIME}&productId={long}&brandId={int}
 ```
 
 **Parámetros de entrada**
@@ -254,7 +254,7 @@ Requiere JDK 25.
 La aplicación arranca en `http://localhost:8080`. Ejemplo de consulta:
 
 ```bash
-curl "http://localhost:8080/api/prices?applicationDate=2020-06-14T16:00:00&productId=35455&brandId=1"
+curl "http://localhost:8080/api/v1/prices?applicationDate=2020-06-14T16:00:00&productId=35455&brandId=1"
 ```
 
 Ejecutar la suite de tests:
