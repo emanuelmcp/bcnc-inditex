@@ -10,12 +10,11 @@ import java.time.LocalDateTime;
 @Table(
         name = "PRICES",
         indexes = @Index(
-                name = "idx-prices_brand_product_dates",
+                name = "idx_prices_brand_product_dates",
                 columnList = "BRAND_ID, PRODUCT_ID, START_DATE, END_DATE"
         )
 )
 @Getter
-@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
