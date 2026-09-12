@@ -4,6 +4,8 @@
 FROM amazoncorretto:25 AS builder
 WORKDIR /build
 
+RUN dnf install -y unzip tar gzip && dnf clean all
+
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
