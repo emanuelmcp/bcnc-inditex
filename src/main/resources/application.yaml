@@ -18,3 +18,18 @@ spring:
   sql:
     init:
       mode: always
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+info:
+  app:
+    name: bcnc-inditex
+    description: REST service that resolves the applicable price rate for a product of a brand at a given date
