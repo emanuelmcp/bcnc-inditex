@@ -22,13 +22,14 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 7. [Endpoint REST](#endpoint-rest)
 8. [Casos de prueba del enunciado](#casos-de-prueba-del-enunciado)
 9. [Cómo ejecutar el proyecto](#cómo-ejecutar-el-proyecto)
-10. [Base de datos H2](#base-de-datos-h2)
-11. [Documentación OpenAPI / Swagger](#documentación-openapi--swagger)
-12. [Observabilidad: Actuator](#observabilidad-actuator)
-13. [Docker y despliegue](#docker-y-despliegue)
-14. [Estrategia de testing](#estrategia-de-testing)
-15. [Estructura del proyecto](#estructura-del-proyecto)
-16. [Decisiones de diseño](#decisiones-de-diseño)
+10. [Configuración y perfiles](#configuración-y-perfiles)
+11. [Base de datos H2](#base-de-datos-h2)
+12. [Documentación OpenAPI / Swagger](#documentación-openapi--swagger)
+13. [Observabilidad: Actuator](#observabilidad-actuator)
+14. [Docker y despliegue](#docker-y-despliegue)
+15. [Estrategia de testing](#estrategia-de-testing)
+16. [Estructura del proyecto](#estructura-del-proyecto)
+17. [Decisiones de diseño](#decisiones-de-diseño)
 
 ---
 
@@ -263,6 +264,75 @@ Ejecutar la suite de tests:
 ./mvnw test
 ```
 
+## Configuración y perfiles
+
+La configuración está separada por entorno siguiendo un principio: **la
+configuración base es la segura, y los perfiles suman comodidades**. De este
+modo "producción" es sencillamente *sin perfil*, y un despliegue que olvide
+configurarlo falla hacia el lado seguro en lugar de exponer de más.
+
+| Fichero | Ámbito | Qué aporta |
+|---|---|---|
+| `src/main/resources/application.yaml` | Base (= producción) | Consola H2, Swagger y detalle de health **desactivados**; datasource externalizado |
+| `src/main/resources/application-dev.yaml` | Perfil `dev` | Consola H2, Swagger UI, `show-sql`, health con detalle y logging DEBUG |
+| `src/test/resources/application-test.yaml` | Perfil `test` | Base de datos propia (`bcnc-test-db`) y salida SQL silenciada |
+
+### Quién activa cada perfil
+
+El artefacto no lleva ningún perfil por defecto: lo declara quien lo arranca.
+
+| Forma de arrancar | Perfil activo | Dónde se declara |
+|---|---|---|
+| `./mvnw spring-boot:run` | `dev` | `<profiles>` del `spring-boot-maven-plugin` (`pom.xml`) |
+| `docker compose up` | `dev` | `SPRING_PROFILES_ACTIVE` en `docker-compose.yml` |
+| `java -jar target/*.jar` | ninguno -> base | — (comportamiento endurecido) |
+| `./mvnw test` | `test` | `@ActiveProfiles("test")` en las clases de test |
+
+Esto es deliberado: el perfil de desarrollo vive en la **herramienta** que
+lanza la aplicación, nunca dentro del artefacto empaquetado. La misma imagen
+Docker desplegada sin `SPRING_PROFILES_ACTIVE` arranca endurecida.
+
+Para un caso puntual:
+
+```bash
+java -jar target/bcnc-inditex-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev
+```
+
+### Qué cambia según el perfil
+
+| | Base (sin perfil) | `dev` |
+|---|:---:|:---:|
+| `GET /api/v1/prices` | 200 | 200 |
+| `GET /actuator/health` | 200 (sin detalle) | 200 (con componentes) |
+| Swagger UI y `/v3/api-docs` | 404 | 200 |
+| Consola H2 en `/h2` | 404 | disponible |
+| `show-sql` de Hibernate | desactivado | activado |
+
+El endpoint de negocio responde igual en ambos casos: lo que cambia es la
+superficie de exposición auxiliar, no la funcionalidad.
+
+### Configuración externalizada
+
+El datasource no está cableado: se resuelve por variables de entorno, con el
+valor por defecto que pide el enunciado (H2 en memoria).
+
+```yaml
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:bcnc-db}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+```
+
+Apuntar el servicio a otro motor (PostgreSQL, por ejemplo) es un cambio de
+configuración, no de código. Es coherente con la arquitectura hexagonal: el
+adaptador de salida habla JPA, no H2.
+
+Además, `spring.jpa.open-in-view` está explícitamente a `false`. Es lo
+correcto en una API REST —no hay renderizado de vistas que necesite la sesión
+de persistencia abierta— y elimina el aviso que Spring Boot emite al arrancar.
+
 ## Base de datos H2
 
 - Consola web: `http://localhost:8080/h2`
@@ -321,15 +391,15 @@ ni el código fuente en producción.
 
 ```mermaid
 flowchart LR
-    subgraph S1["Etapa 1: build (amazoncorretto:25)"]
-        A["Código fuente + pom.xml"] --> B["./mvnw package"]
-        B --> C["bcnc-inditex-*.jar"]
-    end
-    subgraph S2["Etapa 2: runtime (amazoncorretto:25-alpine)"]
-        D["Usuario no-root 'spring'"] --> E["Solo el .jar ejecutable"]
-        E --> F["java -jar app.jar"]
-    end
-    C -->|"COPY --from=builder"| E
+  subgraph S1["Etapa 1: build (amazoncorretto:25)"]
+    A["Código fuente + pom.xml"] --> B["./mvnw package"]
+    B --> C["bcnc-inditex-*.jar"]
+  end
+  subgraph S2["Etapa 2: runtime (amazoncorretto:25-alpine)"]
+    D["Usuario no-root 'spring'"] --> E["Solo el .jar ejecutable"]
+    E --> F["java -jar app.jar"]
+  end
+  C -->|"COPY --from=builder"| E
 ```
 
 **Ficheros de empaquetado**
@@ -369,25 +439,25 @@ incluyendo Swagger UI, la consola H2 y `/actuator/health`.
 
 ```mermaid
 flowchart TD
-    subgraph Dominio["Tests unitarios de dominio (sin Spring)"]
-        T1["PriceTest / MoneyTest / ApplicationPeriodTest"]
-        T2["PriceResolverTest"]
-        T3["FindApplicablePriceQueryTest"]
-    end
-    subgraph Aplicacion["Tests de aplicación (Mockito)"]
-        T4["FindApplicablePriceServiceTest<br/>(mockea PriceRepository)"]
-    end
-    subgraph Infra["Tests de adaptadores"]
-        T5["PriceEntityMapperTest"]
-        T6["PriceResponseMapperTest"]
-        T7["PriceRepositoryH2AdapterTest<br/>(mockea JpaPriceRepository)"]
-    end
-    subgraph Integracion["Tests de integración end-to-end"]
-        T8["PriceControllerTest<br/>@SpringBootTest + MockMvc + H2 real"]
-        T9["ActuatorHealthIntegrationTest<br/>@SpringBootTest + MockMvc"]
-    end
+  subgraph Dominio["Tests unitarios de dominio (sin Spring)"]
+    T1["PriceTest / MoneyTest / ApplicationPeriodTest"]
+    T2["PriceResolverTest"]
+    T3["FindApplicablePriceQueryTest"]
+  end
+  subgraph Aplicacion["Tests de aplicación (Mockito)"]
+    T4["FindApplicablePriceServiceTest<br/>(mockea PriceRepository)"]
+  end
+  subgraph Infra["Tests de adaptadores"]
+    T5["PriceEntityMapperTest"]
+    T6["PriceResponseMapperTest"]
+    T7["PriceRepositoryH2AdapterTest<br/>(mockea JpaPriceRepository)"]
+  end
+  subgraph Integracion["Tests de integración end-to-end"]
+    T8["PriceControllerTest<br/>@SpringBootTest + MockMvc + H2 real"]
+    T9["ActuatorHealthIntegrationTest<br/>@SpringBootTest + MockMvc"]
+  end
 
-    Dominio --> Aplicacion --> Infra --> Integracion
+  Dominio --> Aplicacion --> Infra --> Integracion
 ```
 
 La lógica de negocio (resolución de prioridad, invariantes de los Value
