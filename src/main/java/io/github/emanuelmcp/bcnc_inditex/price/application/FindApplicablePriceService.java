@@ -27,7 +27,7 @@ public class FindApplicablePriceService implements FindApplicablePriceUseCase {
                         () -> new PriceNotFoundException(
                                 query.productId(),
                                 query.brandId(),
-                                query.applicationDate().toString()
+                                query.applicationDate()
                         )
                 );
     }
