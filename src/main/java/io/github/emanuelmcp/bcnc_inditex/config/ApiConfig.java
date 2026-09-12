@@ -7,7 +7,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class ApiConfig implements WebMvcConfigurer {
-    private static final String API_PREFIX = "/api";
+    private static final String API_PREFIX = "/api/v1";
     private static final String BASE_PACKAGE = "io.github.emanuelmcp.bcnc_inditex";
 
     @Override
