@@ -102,6 +102,12 @@ class PriceControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("El último segundo del periodo de una tarifa todavía le pertenece")
+    void shouldApplyRate4AtTheLastSecondOfItsPeriod() throws Exception {
+        thenAppliedRateIs(whenQueryingPriceAt("2020-12-31T23:59:59"), RATE_4);
+    }
+
+    @Test
     @DisplayName("Solo se tienen en cuenta las tarifas de la cadena pedida")
     void shouldApplyTheRateOfTheRequestedBrand() throws Exception {
         thenAppliedRateIs(mockMvc.perform(priceRequest("2020-06-14T16:00:00", PRODUCT_ID, OTHER_BRAND_ID)), OTHER_BRAND_RATE);
@@ -181,6 +187,24 @@ class PriceControllerIntegrationTest {
     @ValueSource(strings = {"2020-06-14T16:00:00Z", "2020-06-14T16:00:00+05:00", "2020-06-14T16:00:00-03:00"})
     @DisplayName("400 cuando la fecha incluye zona horaria, en lugar de ignorarla")
     void shouldReturnBadRequestWhenDateIncludesTimeZone(String applicationDate) throws Exception {
+        whenQueryingPriceAt(applicationDate)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("applicationDate")));
+    }
+
+    @ParameterizedTest(name = "fecha {0}")
+    @ValueSource(strings = {"2020-06-14T16:00", "2020-06-14T16:00:00.5", "2020-06-14T16:00:00.123456789", "2020-12-31T23:59:59.500"})
+    @DisplayName("400 cuando la fecha no sigue exactamente el formato yyyy-MM-dd'T'HH:mm:ss")
+    void shouldReturnBadRequestWhenDateDoesNotMatchTheExactFormat(String applicationDate) throws Exception {
+        whenQueryingPriceAt(applicationDate)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("applicationDate")));
+    }
+
+    @ParameterizedTest(name = "fecha {0}")
+    @ValueSource(strings = {"2020-02-30T16:00:00", "2020-06-14T24:00:00"})
+    @DisplayName("400 cuando la fecha tiene el formato correcto pero no existe")
+    void shouldReturnBadRequestWhenDateDoesNotExist(String applicationDate) throws Exception {
         whenQueryingPriceAt(applicationDate)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("applicationDate")));

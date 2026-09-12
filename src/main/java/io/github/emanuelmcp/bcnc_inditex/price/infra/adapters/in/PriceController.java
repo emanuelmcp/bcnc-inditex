@@ -15,7 +15,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,11 +29,8 @@ import java.time.LocalDateTime;
 @Tag(name = "Prices", description = "Endpoints for querying applicable price rates")
 @RequiredArgsConstructor
 public class PriceController {
-    private static final String APPLICATION_DATE_PATTERN = "yyyy-MM-dd'T'HH:mm:ss";
-
     private final FindApplicablePriceUseCase findApplicablePriceUseCase;
     private final PriceResponseMapper priceResponseMapper;
-
 
     @Operation(
             summary = "Find the applicable price rate",
@@ -70,7 +66,6 @@ public class PriceController {
                     example = "2020-06-14T16:00:00", required = true,
                     schema = @Schema(type = "string", pattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"))
             @RequestParam("applicationDate")
-            @DateTimeFormat(pattern = APPLICATION_DATE_PATTERN)
             LocalDateTime applicationDate,
 
             @Parameter(description = "Product identifier", example = "35455", required = true)
