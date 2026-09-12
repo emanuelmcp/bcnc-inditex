@@ -11,20 +11,27 @@
 	<groupId>io.github.emanuelmcp</groupId>
 	<artifactId>bcnc-inditex</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
+	<name>bcnc-inditex</name>
+	<description>Servicio REST en Spring Boot que resuelve la tarifa de precio aplicable a un producto de una cadena en una fecha determinada (prueba técnica BCNC/Inditex)</description>
+	<url>https://github.com/emanuelmcp/bcnc-inditex</url>
 	<licenses>
-		<license/>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+		</license>
 	</licenses>
 	<developers>
-		<developer/>
+		<developer>
+			<name>Emanuel Marcos Carrero Pankrátov</name>
+			<email>emanuelmcp@gmail.com</email>
+			<url>https://github.com/emanuelmcp</url>
+		</developer>
 	</developers>
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:https://github.com/emanuelmcp/bcnc-inditex.git</connection>
+		<developerConnection>scm:git:https://github.com/emanuelmcp/bcnc-inditex.git</developerConnection>
+		<tag>HEAD</tag>
+		<url>https://github.com/emanuelmcp/bcnc-inditex</url>
 	</scm>
 	<properties>
 		<java.version>25</java.version>
