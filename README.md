@@ -65,50 +65,50 @@ implementa los puertos definidos por el dominio.
 
 ```mermaid
 flowchart TB
-    subgraph IN["Adaptadores de entrada (in)"]
-        Controller["PriceController<br/>@RestController /api/prices"]
-        DtoIn["PriceResponseDto / PriceResponseMapper"]
-    end
+  subgraph IN["Adaptadores de entrada (in)"]
+    Controller["PriceController<br/>@RestController /api/prices"]
+    DtoIn["PriceResponseDto / PriceResponseMapper"]
+  end
 
-    subgraph APP["Capa de aplicación"]
-        Service["FindApplicablePriceService<br/>implements FindApplicablePriceUseCase"]
-    end
+  subgraph APP["Capa de aplicación"]
+    Service["FindApplicablePriceService<br/>implements FindApplicablePriceUseCase"]
+  end
 
-    subgraph DOMAIN["Dominio (sin frameworks)"]
-        UseCasePort["Puerto in:<br/>FindApplicablePriceUseCase"]
-        RepoPort["Puerto out:<br/>PriceRepository"]
-        Resolver["PriceResolver<br/>(regla de negocio: prioridad)"]
-        Models["Price / Money / ApplicationPeriod<br/>(records autovalidados)"]
-    end
+  subgraph DOMAIN["Dominio (sin frameworks)"]
+    UseCasePort["Puerto in:<br/>FindApplicablePriceUseCase"]
+    RepoPort["Puerto out:<br/>PriceRepository"]
+    Resolver["PriceResolver<br/>(regla de negocio: prioridad)"]
+    Models["Price / Money / ApplicationPeriod<br/>(records autovalidados)"]
+  end
 
-    subgraph OUT["Adaptadores de salida (out)"]
-        Adapter["PriceRepositoryH2Adapter"]
-        Jpa["JpaPriceRepository<br/>(Spring Data JPA)"]
-        Entity["PriceEntity"]
-        EntityMapper["PriceEntityMapper"]
-    end
+  subgraph OUT["Adaptadores de salida (out)"]
+    Adapter["PriceRepositoryH2Adapter"]
+    Jpa["JpaPriceRepository<br/>(Spring Data JPA)"]
+    Entity["PriceEntity"]
+    EntityMapper["PriceEntityMapper"]
+  end
 
-    subgraph DB["Persistencia"]
-        H2[("H2 in-memory<br/>tabla PRICES")]
-    end
+  subgraph DB["Persistencia"]
+    H2[("H2 in-memory<br/>tabla PRICES")]
+  end
 
-    Controller --> DtoIn
-    Controller --> UseCasePort
-    UseCasePort -. implementa .-> Service
-    Service --> Resolver
-    Service --> RepoPort
-    Resolver --> Models
-    RepoPort -. implementa .-> Adapter
-    Adapter --> Jpa
-    Adapter --> EntityMapper
-    Jpa --> Entity
-    Entity --> H2
+  Controller --> DtoIn
+  Controller --> UseCasePort
+  UseCasePort -. implementa .-> Service
+  Service --> Resolver
+  Service --> RepoPort
+  Resolver --> Models
+  RepoPort -. implementa .-> Adapter
+  Adapter --> Jpa
+  Adapter --> EntityMapper
+  Jpa --> Entity
+  Entity --> H2
 
-    style DOMAIN fill:#1f6f54,color:#fff
-    style APP fill:#2b5a8c,color:#fff
-    style IN fill:#7a4fa3,color:#fff
-    style OUT fill:#7a4fa3,color:#fff
-    style DB fill:#8c8c8c,color:#fff
+  style DOMAIN fill:#1f6f54,color:#fff
+  style APP fill:#2b5a8c,color:#fff
+  style IN fill:#7a4fa3,color:#fff
+  style OUT fill:#7a4fa3,color:#fff
+  style DB fill:#8c8c8c,color:#fff
 ```
 
 Principios aplicados:
@@ -330,16 +330,13 @@ flowchart LR
     C -->|"COPY --from=builder"| E
 ```
 
-**Ficheros entregados** (por diseño, no llevan el nombre final para que se
-revisen antes de aplicarlos):
+**Ficheros de empaquetado**
 
-- `docker.txt` → contenido a copiar en un fichero `Dockerfile` en la raíz del
-  proyecto.
+- `Dockerfile` → Dockerfile multi-stage del proyecto.
 - `docker-compose.yml` → orquesta la construcción y el arranque del
-  contenedor; asume que el `Dockerfile` ya existe con ese nombre exacto en la
-  raíz (referenciado como `dockerfile: Dockerfile` dentro del compose).
+  contenedor.
 
-Características del `Dockerfile`:
+Características del Dockerfile:
 
 - **Build multi-stage**: la etapa de compilación usa `amazoncorretto:25`
   completo (incluye JDK + Maven vía `mvnw`); la etapa final usa
@@ -356,8 +353,6 @@ Características del `Dockerfile`:
 Uso:
 
 ```bash
-# 1. Copiar el contenido de docker.txt a un fichero llamado "Dockerfile" en la raíz
-# 2. Construir y levantar el servicio
 docker compose up --build
 ```
 
@@ -418,7 +413,7 @@ src/main/java/io/github/emanuelmcp/bcnc_inditex/
         ├── adapters/out/          # JPA entity, repository, adapter H2
         └── config/                # PriceBeanLoader (wiring manual del dominio)
 
-docker.txt            # Contenido para el Dockerfile (build multi-stage)
+Dockerfile             # Imagen Docker multi-stage
 docker-compose.yml     # Orquestación local del contenedor
 ```
 
