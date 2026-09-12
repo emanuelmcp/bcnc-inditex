@@ -1,4 +1,4 @@
-package io.github.emanuelmcp.bcnc_inditex.price.infra.config;
+package io.github.emanuelmcp.bcnc_inditex.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.bind.annotation.RestController;
