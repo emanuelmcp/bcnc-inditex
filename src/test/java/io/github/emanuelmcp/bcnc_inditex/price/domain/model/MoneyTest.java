@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MoneyTest {
     private static final BigDecimal AMOUNT = BigDecimal.valueOf(10.0);
+    private static final BigDecimal INCORRECT_AMOUNT = new BigDecimal("10.1234");
     private static final String CURRENCY = "EUR";
 
 
@@ -36,6 +37,11 @@ class MoneyTest {
     @Test
     void shouldThrowIllegalArgumentExceptionWhenCurrencyIsBlank() {
         assertThrows(IllegalArgumentException.class, () -> new Money(AMOUNT, ""));
+    }
+
+    @Test
+    void shouldThrowIllegalArgumentExceptionWhenScaleIsGreaterThanTwo() {
+        assertThrows(IllegalArgumentException.class, () -> new Money(INCORRECT_AMOUNT, CURRENCY));
     }
 
     @Test

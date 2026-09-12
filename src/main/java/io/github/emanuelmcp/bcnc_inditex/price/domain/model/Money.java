@@ -15,6 +15,9 @@ public record Money(BigDecimal amount, String currency) {
         if (currency.isBlank()) {
             throw new IllegalArgumentException("Currency can not be blank");
         }
+        if (amount.scale() > 2) {
+            throw new IllegalArgumentException("Amount can not have more than 2 decimals");
+        }
         amount = amount.setScale(2, RoundingMode.UNNECESSARY);
     }
 }
