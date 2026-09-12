@@ -1,6 +1,5 @@
 package io.github.emanuelmcp.bcnc_inditex.common.infra.exception;
-
-import io.github.emanuelmcp.bcnc_inditex.price.domain.exception.PriceNotFoundException;
+import io.github.emanuelmcp.bcnc_inditex.common.domain.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
@@ -27,9 +26,9 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(PriceNotFoundException.class)
-    public ResponseEntity<UnifiedErrorResponseDto> handlePriceNotFound(
-            PriceNotFoundException ex, HttpServletRequest request) {
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<UnifiedErrorResponseDto> handleResourceNotFound(
+            ResourceNotFoundException ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request.getRequestURI());
     }
 
