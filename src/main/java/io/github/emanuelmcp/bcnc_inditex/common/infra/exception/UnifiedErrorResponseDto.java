@@ -1,4 +1,4 @@
-package io.github.emanuelmcp.bcnc_inditex.exception;
+package io.github.emanuelmcp.bcnc_inditex.common.infra.exception;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;

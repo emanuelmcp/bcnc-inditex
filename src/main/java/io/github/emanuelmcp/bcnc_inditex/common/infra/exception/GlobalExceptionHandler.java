@@ -1,4 +1,4 @@
-package io.github.emanuelmcp.bcnc_inditex.exception;
+package io.github.emanuelmcp.bcnc_inditex.common.infra.exception;
 
 import io.github.emanuelmcp.bcnc_inditex.price.domain.exception.PriceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;

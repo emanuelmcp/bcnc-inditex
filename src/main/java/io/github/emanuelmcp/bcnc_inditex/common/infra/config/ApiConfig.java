@@ -1,4 +1,4 @@
-package io.github.emanuelmcp.bcnc_inditex.config;
+package io.github.emanuelmcp.bcnc_inditex.common.infra.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

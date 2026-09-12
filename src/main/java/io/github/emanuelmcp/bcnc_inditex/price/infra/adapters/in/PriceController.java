@@ -1,6 +1,6 @@
 package io.github.emanuelmcp.bcnc_inditex.price.infra.adapters.in;
 
-import io.github.emanuelmcp.bcnc_inditex.exception.UnifiedErrorResponseDto;
+import io.github.emanuelmcp.bcnc_inditex.common.infra.exception.UnifiedErrorResponseDto;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.port.in.FindApplicablePriceQuery;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.port.in.FindApplicablePriceUseCase;

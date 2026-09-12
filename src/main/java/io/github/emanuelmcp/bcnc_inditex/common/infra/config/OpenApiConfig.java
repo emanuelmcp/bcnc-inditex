@@ -1,4 +1,4 @@
-package io.github.emanuelmcp.bcnc_inditex.config;
+package io.github.emanuelmcp.bcnc_inditex.common.infra.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
