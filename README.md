@@ -123,7 +123,7 @@ Principios aplicados:
   implementa, nunca al revés.
 - **Independencia de framework en el dominio**: `PriceResolver` y
   `FindApplicablePriceService` se instancian como beans manuales en
-  `PriceBeanLoader`, no llevan anotaciones de Spring.
+  `PriceConfiguration`, no llevan anotaciones de Spring.
 - **Value Objects inmutables**: `Price`, `Money` y `ApplicationPeriod` son
   `record` de Java con validación de invariantes en el constructor compacto
   (no puede existir un `Money` con importe negativo, ni un `ApplicationPeriod`
@@ -531,7 +531,7 @@ src/main/java/io/github/emanuelmcp/bcnc_inditex/
     └── infra/
         ├── adapters/in/          # PriceController + DTOs
         ├── adapters/out/         # PriceEntity, JpaPriceRepository, PriceRepositoryJpaAdapter
-        └── config/               # PriceBeanLoader (wiring manual del dominio)
+        └── config/               # PriceConfiguration (wiring manual del dominio)
 
 src/main/resources/
 ├── application.yaml              # Configuración base (sin perfil, endurecida)
@@ -561,7 +561,7 @@ docker-compose.yml     # Orquestación local del contenedor (perfil dev, healthc
 - **Un único resultado garantizado por construcción**: `PriceResolver` usa
   `Stream.max(...)` sobre el comparador de prioridad, que devuelve como mucho
   un `Optional<Price>`; nunca puede haber ambigüedad en la respuesta.
-- **Beans de dominio cableados manualmente** (`PriceBeanLoader`) en lugar de
+- **Beans de dominio cableados manualmente** (`PriceConfiguration`) en lugar de
   `@Service`/`@Component` sobre las clases de dominio, para que el paquete
   `domain` no tenga ninguna dependencia de Spring.
 - **Actuator separado de `/api`**: los endpoints de monitorización no
