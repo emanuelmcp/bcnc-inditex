@@ -8,6 +8,7 @@ import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -60,7 +61,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .filter(Objects::nonNull)
                 .collect(Collectors.joining("; "));
         String path = ((ServletWebRequest) request).getRequest().getRequestURI();
-        return new ResponseEntity<>(payload(HttpStatus.BAD_REQUEST, message, path), headers, status);
+        return jsonResponse(status, headers, payload(HttpStatus.BAD_REQUEST, message, path));
     }
 
     @Override
@@ -76,11 +77,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 ? errorResponse.getBody().getDetail()
                 : ex.getMessage();
         String path = ((ServletWebRequest) request).getRequest().getRequestURI();
-        return new ResponseEntity<>(payload(status, detail, path), headers, statusCode);
+        return jsonResponse(statusCode, headers, payload(status, detail, path));
     }
 
     private ResponseEntity<UnifiedErrorResponseDto> build(HttpStatus status, String message, String path) {
-        return ResponseEntity.status(status).body(payload(status, message, path));
+        return jsonResponse(status, HttpHeaders.EMPTY, payload(status, message, path));
+    }
+
+    private static <T> ResponseEntity<T> jsonResponse(HttpStatusCode status, HttpHeaders headers, T body) {
+        return ResponseEntity.status(status)
+                .headers(headers)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 
     private UnifiedErrorResponseDto payload(HttpStatus status, String message, String path) {

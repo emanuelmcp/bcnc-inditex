@@ -30,6 +30,8 @@ import java.time.LocalDateTime;
 @Tag(name = "Prices", description = "Endpoints for querying applicable price rates")
 @RequiredArgsConstructor
 public class PriceController {
+    private static final String APPLICATION_DATE_PATTERN = "yyyy-MM-dd'T'HH:mm:ss";
+
     private final FindApplicablePriceUseCase findApplicablePriceUseCase;
     private final PriceResponseMapper priceResponseMapper;
 
@@ -62,12 +64,13 @@ public class PriceController {
                             schema = @Schema(implementation = UnifiedErrorResponseDto.class))
             )
     })
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<PriceResponseDto> getApplicablePrice(
-            @Parameter(description = "Date and time at which the price should apply",
-                    example = "2020-06-14T16:00:00", required = true)
+            @Parameter(description = "Local date and time at which the price should apply, without time zone",
+                    example = "2020-06-14T16:00:00", required = true,
+                    schema = @Schema(type = "string", pattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"))
             @RequestParam("applicationDate")
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            @DateTimeFormat(pattern = APPLICATION_DATE_PATTERN)
             LocalDateTime applicationDate,
 
             @Parameter(description = "Product identifier", example = "35455", required = true)
