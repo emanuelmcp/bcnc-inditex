@@ -55,6 +55,18 @@ class FindApplicablePriceServiceTest {
     }
 
     @Test
+    void shouldApplyAPriceDuringTheWholeLastSecondOfItsPeriod() {
+        ApplicationPeriod applicationPeriod = new ApplicationPeriod(APPLICATION_DATE.minusDays(1), APPLICATION_DATE);
+        Money money = new Money(AMOUNT, CURRENCY);
+        Price expected = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, applicationPeriod, PRIORITY, money);
+        when(priceRepository.findCandidates(anyInt(), anyLong(), any())).thenReturn(List.of(expected));
+        FindApplicablePriceQuery query = new FindApplicablePriceQuery(BRAND_ID, PRODUCT_ID, APPLICATION_DATE.plusNanos(500_000_000));
+        Price result = sut.findApplicablePrice(query);
+        verify(priceRepository).findCandidates(BRAND_ID, PRODUCT_ID, APPLICATION_DATE);
+        assertEquals(expected, result);
+    }
+
+    @Test
     void shouldThrowPriceNotFoundExceptionWhenThereAreNoCandidates() {
         when(priceRepository.findCandidates(anyInt(), anyLong(), any())).thenReturn(List.of());
         assertThrows(PriceNotFoundException.class, () -> sut.findApplicablePrice(QUERY));
