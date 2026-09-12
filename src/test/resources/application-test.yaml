@@ -3,3 +3,7 @@ spring:
     url: jdbc:h2:mem:bcnc-test-db
   jpa:
     show-sql: false
+management:
+  endpoint:
+    health:
+      show-details: always
