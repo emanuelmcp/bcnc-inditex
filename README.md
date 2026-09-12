@@ -1,5 +1,7 @@
 # BCNC Inditex — Prices API
 
+[![CI](https://github.com/emanuelmcp/bcnc-inditex/actions/workflows/ci.yml/badge.svg)](https://github.com/emanuelmcp/bcnc-inditex/actions/workflows/ci.yml)
+
 Servicio REST en Spring Boot que resuelve la tarifa de precio aplicable a un
 producto de una cadena (brand) en una fecha/hora determinada, a partir de la
 tabla `PRICES` del ejemplo de la prueba técnica.
@@ -238,7 +240,7 @@ Todos verificados sobre el producto `35455`, cadena `1` (ZARA):
 | 5 | 2020-06-16 21:00            | 4                               | 38.95 € |
 
 Implementados como tests de integración en
-`PriceControllerTest` y replicados como tests unitarios de dominio en
+`PriceControllerIntegrationTest` y replicados como tests unitarios de dominio en
 `PriceResolverTest` (sin levantar contexto de Spring ni base de datos).
 
 ## Cómo ejecutar el proyecto
