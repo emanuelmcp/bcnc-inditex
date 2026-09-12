@@ -3,7 +3,6 @@ package io.github.emanuelmcp.bcnc_inditex.price.infra.adapters.in.dto;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.ApplicationPeriod;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Money;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
-import io.github.emanuelmcp.bcnc_inditex.price.infra.adapters.out.PriceEntity;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -13,7 +12,6 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PriceResponseMapperTest {
-    private static final Long ID = 1L;
     private static final Integer BRAND_ID = 1;
     private static final LocalDateTime START_DATE = LocalDateTime.of(2025, 6, 18, 10, 35);
     private static final LocalDateTime END_DATE = LocalDateTime.of(2026, 6, 18, 10, 35);
