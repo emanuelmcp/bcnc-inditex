@@ -32,4 +32,10 @@ class FindApplicablePriceQueryTest {
     void shouldThrowNPEWhenApplicationDateIsNull() {
         assertThrows(NullPointerException.class, () -> new FindApplicablePriceQuery(BRAND_ID, PRODUCT_ID, null));
     }
+
+    @Test
+    void shouldTruncateApplicationDateToSeconds() {
+        FindApplicablePriceQuery query = new FindApplicablePriceQuery(BRAND_ID, PRODUCT_ID, APPLICATION_DATE.plusNanos(500_000_000));
+        assertEquals(APPLICATION_DATE, query.applicationDate());
+    }
 }
