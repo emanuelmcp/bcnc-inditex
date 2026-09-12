@@ -18,7 +18,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class PriceRepositoryH2AdapterTest {
+class PriceRepositoryJpaAdapterTest {
     private static final Long ID = 1L;
     private static final Integer BRAND_ID = 1;
     private static final LocalDateTime START_DATE = LocalDateTime.of(2025, 6, 18, 10, 35);
@@ -35,11 +35,11 @@ class PriceRepositoryH2AdapterTest {
 
     private final PriceEntityMapper priceEntityMapper = new PriceEntityMapper();
 
-    private PriceRepositoryH2Adapter sut;
+    private PriceRepositoryJpaAdapter sut;
 
     @BeforeEach
     void setUp() {
-        sut = new PriceRepositoryH2Adapter(jpaPriceRepository, priceEntityMapper);
+        sut = new PriceRepositoryJpaAdapter(jpaPriceRepository, priceEntityMapper);
     }
 
     @Test

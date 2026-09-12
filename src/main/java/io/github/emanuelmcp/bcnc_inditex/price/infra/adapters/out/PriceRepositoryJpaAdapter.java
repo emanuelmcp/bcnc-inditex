@@ -11,7 +11,7 @@ import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
-public class PriceRepositoryH2Adapter implements PriceRepository {
+public class PriceRepositoryJpaAdapter implements PriceRepository {
     private final JpaPriceRepository jpaPriceRepository;
     private final PriceEntityMapper priceEntityMapper;
 
