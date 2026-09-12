@@ -42,7 +42,8 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 - Base de datos en memoria H2, inicializada al arrancar con los datos del
   ejemplo (`src/main/resources/data.sql`).
 - Tests de integración sobre el endpoint que cubren los 5 casos pedidos en el
-  enunciado, más casos adicionales de robustez (400, 404, 405).
+  enunciado, más casos adicionales de robustez (400, 404, 405, 406) y de
+  filtrado por cadena y producto.
 
 ## Stack técnico
 
@@ -196,16 +197,21 @@ flowchart LR
 ## Endpoint REST
 
 ```
-GET /api/v1/prices?applicationDate={ISO_LOCAL_DATE_TIME}&productId={long}&brandId={int}
+GET /api/v1/prices?applicationDate={yyyy-MM-dd'T'HH:mm:ss}&productId={long}&brandId={int}
 ```
 
 **Parámetros de entrada**
 
 | Parámetro        | Tipo             | Obligatorio | Ejemplo               |
 |-------------------|------------------|:-----------:|------------------------|
-| `applicationDate` | `LocalDateTime`  | Sí          | `2020-06-14T16:00:00` |
+| `applicationDate` | `LocalDateTime` (`yyyy-MM-dd'T'HH:mm:ss`, sin zona horaria) | Sí | `2020-06-14T16:00:00` |
 | `productId`       | `Long`           | Sí          | `35455`               |
 | `brandId`         | `Integer`        | Sí          | `1`                   |
+
+> **Supuesto sobre la zona horaria**: la tabla `PRICES` guarda las fechas sin
+> zona horaria, así que `applicationDate` se interpreta en esa misma hora local.
+> Si la fecha llega con zona (`Z`, `+02:00`…), se responde `400` en lugar de
+> ignorarla, porque el precio aplicable podría ser otro.
 
 **Respuesta 200 OK**
 
@@ -221,14 +227,14 @@ GET /api/v1/prices?applicationDate={ISO_LOCAL_DATE_TIME}&productId={long}&brandI
 }
 ```
 
-**Respuestas de error** (formato unificado `UnifiedErrorResponseDto`)
+**Respuestas de error** (formato unificado `UnifiedErrorResponseDto`, siempre en JSON)
 
 | Código | Motivo                                              |
 |--------|------------------------------------------------------|
-| 400    | Falta un parámetro obligatorio, tiene un tipo inválido o `productId`/`brandId` no es positivo |
+| 400    | Falta un parámetro obligatorio, tiene un tipo inválido, la fecha no es una fecha-hora local válida (por ejemplo, porque incluye zona horaria) o `productId`/`brandId` no es positivo |
 | 404    | No existe ninguna tarifa aplicable para esos parámetros |
 | 405    | Método distinto de `GET` |
-| 406    | El cliente pide un formato distinto de JSON (`Accept`) |
+| 406    | El cliente no acepta JSON (`Accept`); el error se devuelve igualmente en JSON |
 | 500    | Error interno no controlado                          |
 
 ## Casos de prueba del enunciado
@@ -282,7 +288,7 @@ lugar de exponer de más.
 |---|---|---|
 | `src/main/resources/application.yaml` | Base (sin perfil) | H2 en memoria con los datos del enunciado; consola H2, Swagger e `info` **desactivados**; health sin detalle |
 | `src/main/resources/application-dev.yaml` | Perfil `dev` | Consola H2 (solo desde `localhost`), Swagger UI, `info`, health con detalle, `show-sql` y logging DEBUG |
-| `src/test/resources/application-test.yaml` | Perfil `test` | Base de datos propia (`bcnc-test-db`), SQL silenciado y health con detalle (lo necesita `ActuatorHealthIntegrationTest`) |
+| `src/test/resources/application-test.yaml` | Perfil `test` | Base de datos propia (`bcnc-test-db`) cargada con `data.sql` + `test-prices.sql`, SQL silenciado y health con detalle (lo necesita `ActuatorHealthIntegrationTest`) |
 
 ### Quién activa cada perfil
 
@@ -488,6 +494,7 @@ flowchart TD
     T5["PriceEntityMapperTest"]
     T6["PriceResponseMapperTest"]
     T7["PriceRepositoryJpaAdapterTest<br/>(mockea JpaPriceRepository)"]
+    T10["PriceRepositoryJpaAdapterIntegrationTest<br/>@DataJpaTest + H2 real (consulta JPQL)"]
   end
   subgraph Integracion["Tests de integración end-to-end"]
     T8["PriceControllerIntegrationTest<br/>@SpringBootTest + MockMvc + H2 real"]
@@ -532,7 +539,8 @@ src/main/resources/
 └── data.sql                      # Datos del enunciado
 
 src/test/resources/
-└── application-test.yaml         # Perfil test
+├── application-test.yaml         # Perfil test
+└── test-prices.sql               # Tarifas "trampa" de otra cadena y otro producto (solo tests)
 
 Dockerfile             # Imagen Docker multi-stage
 docker-compose.yml     # Orquestación local del contenedor (perfil dev, healthcheck)
