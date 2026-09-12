@@ -7,12 +7,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 
-@RestController
+@RestControllerAdvice
 public class GlobalExceptionHandler {
     @ExceptionHandler(PriceNotFoundException.class)
     public ResponseEntity<UnifiedErrorResponseDto> handlePriceNotFoundException(PriceNotFoundException ex, HttpServletRequest request) {
