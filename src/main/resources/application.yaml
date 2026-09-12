@@ -38,3 +38,5 @@ info:
   app:
     name: bcnc-inditex
     description: REST service that resolves the applicable price rate for a product of a brand at a given date
+api:
+  prefix: /api/v1
