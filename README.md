@@ -42,7 +42,7 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 - Base de datos en memoria H2, inicializada al arrancar con los datos del
   ejemplo (`src/main/resources/data.sql`).
 - Tests de integración sobre el endpoint que cubren los 5 casos pedidos en el
-  enunciado, más casos adicionales de robustez (404, 400).
+  enunciado, más casos adicionales de robustez (400, 404, 405).
 
 ## Stack técnico
 
@@ -54,7 +54,7 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 | Base de datos               | H2 (en memoria)                                     |
 | Documentación API           | springdoc-openapi (Swagger UI)                      |
 | Observabilidad              | Spring Boot Actuator                                |
-| Testing                     | JUnit 5, Mockito, MockMvc, Spring Boot Test         |
+| Testing                     | JUnit 6, Mockito, MockMvc, Spring Boot Test         |
 | Build                       | Maven (wrapper incluido, `mvnw`)                    |
 | Empaquetado                 | Docker (multi-stage build) + Docker Compose         |
 | Reducción de boilerplate    | Lombok                                              |
@@ -63,7 +63,8 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 
 El servicio sigue **arquitectura hexagonal (puertos y adaptadores)**. El
 dominio (`price/domain`) no tiene ninguna dependencia de Spring ni de JPA: es
-Java puro, testeable de forma aislada. La infraestructura (`price/infra`)
+Java puro, testeable de forma aislada; su única dependencia es `common/domain`,
+también Java puro. La infraestructura (`price/infra`)
 implementa los puertos definidos por el dominio.
 
 ```mermaid
@@ -85,7 +86,7 @@ flowchart TB
   end
 
   subgraph OUT["Adaptadores de salida (out)"]
-    Adapter["PriceRepositoryH2Adapter"]
+    Adapter["PriceRepositoryJpaAdapter"]
     Jpa["JpaPriceRepository<br/>(Spring Data JPA)"]
     Entity["PriceEntity"]
     EntityMapper["PriceEntityMapper"]
@@ -156,7 +157,7 @@ sequenceDiagram
     participant Controller as PriceController
     participant Service as FindApplicablePriceService
     participant Resolver as PriceResolver
-    participant Repo as PriceRepositoryH2Adapter
+    participant Repo as PriceRepositoryJpaAdapter
     participant DB as H2 (tabla PRICES)
 
     Client->>Controller: GET /api/v1/prices?applicationDate&productId&brandId
@@ -164,9 +165,9 @@ sequenceDiagram
     Service->>Repo: findCandidates(brandId, productId, applicationDate)
     Repo->>DB: SELECT ... WHERE brand_id=? AND product_id=?<br/>AND start_date<=? AND end_date>=?
     DB-->>Repo: filas candidatas (ya acotadas por índice)
-    Repo-->>Service: List&lt;Price&gt; (mapeadas a dominio)
+    Repo-->>Service: List<Price> (mapeadas a dominio)
     Service->>Resolver: resolveApplicablePrice(fecha, candidatos)
-    Resolver-->>Service: Optional&lt;Price&gt; (mayor PRIORITY)
+    Resolver-->>Service: Optional<Price> (mayor PRIORITY)
     alt precio encontrado
         Service-->>Controller: Price
         Controller-->>Client: 200 OK + PriceResponseDto
@@ -186,7 +187,7 @@ filtrado de persistencia:
 flowchart LR
     A["Candidatos devueltos<br/>por PriceRepository"] --> B{"¿La fecha está dentro<br/>de applicationPeriod?"}
     B -- no --> D["Se descarta"]
-    B -- sí --> C["Se compara por PRIORITY<br/>(mayor gana)"]
+    B -- sí --> C["Se compara por PRIORITY<br/>(mayor gana, y a igualdad<br/>la de inicio más reciente)"]
     C --> E["max() → Optional&lt;Price&gt;"]
     E -- vacío --> F["PriceNotFoundException → 404"]
     E -- presente --> G["200 OK con la tarifa aplicable"]
@@ -224,8 +225,10 @@ GET /api/v1/prices?applicationDate={ISO_LOCAL_DATE_TIME}&productId={long}&brandI
 
 | Código | Motivo                                              |
 |--------|------------------------------------------------------|
-| 400    | Falta un parámetro obligatorio o tiene un tipo inválido |
+| 400    | Falta un parámetro obligatorio, tiene un tipo inválido o `productId`/`brandId` no es positivo |
 | 404    | No existe ninguna tarifa aplicable para esos parámetros |
+| 405    | Método distinto de `GET` |
+| 406    | El cliente pide un formato distinto de JSON (`Accept`) |
 | 500    | Error interno no controlado                          |
 
 ## Casos de prueba del enunciado
@@ -252,6 +255,10 @@ Requiere JDK 25.
 ./mvnw spring-boot:run
 ```
 
+Arranca con el perfil `dev` activo (lo declara el `spring-boot-maven-plugin`
+en el `pom.xml`), que habilita Swagger UI y la consola H2. Ver
+[Configuración y perfiles](#configuración-y-perfiles).
+
 La aplicación arranca en `http://localhost:8080`. Ejemplo de consulta:
 
 ```bash
@@ -267,15 +274,15 @@ Ejecutar la suite de tests:
 ## Configuración y perfiles
 
 La configuración está separada por entorno siguiendo un principio: **la
-configuración base es la segura, y los perfiles suman comodidades**. De este
-modo "producción" es sencillamente *sin perfil*, y un despliegue que olvide
-configurarlo falla hacia el lado seguro en lugar de exponer de más.
+configuración sin perfil es la endurecida, y los perfiles suman comodidades**.
+Así, un arranque que olvide activar un perfil falla hacia el lado seguro en
+lugar de exponer de más.
 
 | Fichero | Ámbito | Qué aporta |
 |---|---|---|
-| `src/main/resources/application.yaml` | Base (= producción) | Consola H2, Swagger y detalle de health **desactivados**; datasource externalizado |
-| `src/main/resources/application-dev.yaml` | Perfil `dev` | Consola H2, Swagger UI, `show-sql`, health con detalle y logging DEBUG |
-| `src/test/resources/application-test.yaml` | Perfil `test` | Base de datos propia (`bcnc-test-db`) y salida SQL silenciada |
+| `src/main/resources/application.yaml` | Base (sin perfil) | H2 en memoria con los datos del enunciado; consola H2, Swagger e `info` **desactivados**; health sin detalle |
+| `src/main/resources/application-dev.yaml` | Perfil `dev` | Consola H2 (solo desde `localhost`), Swagger UI, `info`, health con detalle, `show-sql` y logging DEBUG |
+| `src/test/resources/application-test.yaml` | Perfil `test` | Base de datos propia (`bcnc-test-db`), SQL silenciado y health con detalle (lo necesita `ActuatorHealthIntegrationTest`) |
 
 ### Quién activa cada perfil
 
@@ -285,7 +292,7 @@ El artefacto no lleva ningún perfil por defecto: lo declara quien lo arranca.
 |---|---|---|
 | `./mvnw spring-boot:run` | `dev` | `<profiles>` del `spring-boot-maven-plugin` (`pom.xml`) |
 | `docker compose up` | `dev` | `SPRING_PROFILES_ACTIVE` en `docker-compose.yml` |
-| `java -jar target/*.jar` | ninguno -> base | — (comportamiento endurecido) |
+| `java -jar target/*.jar` | ninguno → base | — (comportamiento endurecido) |
 | `./mvnw test` | `test` | `@ActiveProfiles("test")` en las clases de test |
 
 Esto es deliberado: el perfil de desarrollo vive en la **herramienta** que
@@ -303,41 +310,41 @@ java -jar target/bcnc-inditex-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev
 | | Base (sin perfil) | `dev` |
 |---|:---:|:---:|
 | `GET /api/v1/prices` | 200 | 200 |
-| `GET /actuator/health` | 200 (sin detalle) | 200 (con componentes) |
+| `GET /actuator/health` | 200 (sin detalle de componentes) | 200 (con componentes) |
+| `GET /actuator/info` | 404 | 200 |
 | Swagger UI y `/v3/api-docs` | 404 | 200 |
-| Consola H2 en `/h2` | 404 | disponible |
+| Consola H2 en `/h2` | 404 | disponible solo desde `localhost` |
 | `show-sql` de Hibernate | desactivado | activado |
 
 El endpoint de negocio responde igual en ambos casos: lo que cambia es la
 superficie de exposición auxiliar, no la funcionalidad.
 
-### Configuración externalizada
+### Base de datos
 
-El datasource no está cableado: se resuelve por variables de entorno, con el
-valor por defecto que pide el enunciado (H2 en memoria).
-
-```yaml
-spring:
-  datasource:
-    url: ${DB_URL:jdbc:h2:mem:bcnc-db}
-    username: ${DB_USERNAME:sa}
-    password: ${DB_PASSWORD:}
-    driver-class-name: ${DB_DRIVER:org.h2.Driver}
-```
-
-Apuntar el servicio a otro motor (PostgreSQL, por ejemplo) es un cambio de
-configuración, no de código. Es coherente con la arquitectura hexagonal: el
-adaptador de salida habla JPA, no H2.
+La base de datos es H2 en memoria (`jdbc:h2:mem:bcnc-db`), tal como exige el
+enunciado. El esquema se crea con `ddl-auto: create-drop` y `data.sql` se carga
+en cada arranque, de modo que los datos se reinician siempre desde el juego de
+datos del ejemplo.
 
 Además, `spring.jpa.open-in-view` está explícitamente a `false`. Es lo
 correcto en una API REST —no hay renderizado de vistas que necesite la sesión
 de persistencia abierta— y elimina el aviso que Spring Boot emite al arrancar.
 
+### Prefijo de la API
+
+El prefijo de las rutas de negocio se lee de `api.prefix` (por defecto
+`/api/v1`) a través de `ApiProperties`, y `ApiConfig` lo aplica a los
+`@RestController` del paquete de la aplicación. La especificación OpenAPI
+refleja el prefijo configurado.
+
 ## Base de datos H2
 
-- Consola web: `http://localhost:8080/h2`
-- URL JDBC: `jdbc:h2:mem:bcnc-db`
+- URL JDBC: `jdbc:h2:mem:bcnc-db` (los tests usan su propia base,
+  `jdbc:h2:mem:bcnc-test-db`)
 - Usuario: `sa` — Password: *(vacío)*
+- Consola web: `http://localhost:8080/h2`, **solo con el perfil `dev` y solo
+  desde `localhost`**. H2 rechaza las conexiones remotas (`web-allow-others`
+  desactivado), por lo que no es accesible a través del contenedor Docker.
 - El esquema se crea con `ddl-auto: create-drop` y se puebla automáticamente
   con `data.sql` en cada arranque (`spring.sql.init.mode=always`,
   `defer-datasource-initialization=true` para que se ejecute después de que
@@ -345,20 +352,40 @@ de persistencia abierta— y elimina el aviso que Spring Boot emite al arrancar.
 
 ## Documentación OpenAPI / Swagger
 
+Disponible **solo con el perfil `dev`**. En la configuración base está
+deshabilitada (`springdoc.api-docs.enabled=false`,
+`springdoc.swagger-ui.enabled=false`).
+
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Especificación OpenAPI: `http://localhost:8080/v3/api-docs`
 
 ## Observabilidad: Actuator
 
-El proyecto expone Spring Boot Actuator para monitorización básica del
-servicio:
+El proyecto expone Spring Boot Actuator para monitorización básica. Lo que se
+publica depende del perfil:
 
-| Endpoint                    | Descripción                                    |
-|-------------------------------|---------------------------------------------------|
-| `GET /actuator/health`        | Estado de la aplicación y de sus componentes (incluye el estado de la conexión a H2) |
-| `GET /actuator/info`          | Metadatos estáticos de la aplicación (nombre, descripción) |
+| Endpoint | Base (sin perfil) | Perfil `dev` |
+|---|---|---|
+| `GET /actuator/health` | Estado global (`UP`/`DOWN`), sin detalle de componentes | Estado global y de cada componente, incluida la conexión a H2 |
+| `GET /actuator/info` | No expuesto (404) | Metadatos de la aplicación (nombre, descripción) |
 
-Configuración relevante en `application.yaml`:
+Configuración en `application.yaml` (base):
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  info:
+    env:
+      enabled: false
+```
+
+Lo que cambia en `application-dev.yaml`:
 
 ```yaml
 management:
@@ -369,19 +396,24 @@ management:
   endpoint:
     health:
       show-details: always
+  info:
+    env:
+      enabled: true
 ```
 
-> **Nota**: los endpoints de Actuator quedan fuera del prefijo `/api`, ya que
-> `ApiConfig` solo aplica ese prefijo a clases anotadas con `@RestController`,
-> y Actuator registra sus endpoints por su propio mecanismo de
-> autoconfiguración. Esto es intencional y es la práctica habitual: los
-> health checks de orquestadores (Docker, Kubernetes) y de balanceadores de
-> carga esperan encontrarlos en una ruta estable y separada de la API de
-> negocio.
+> **Nota**: los endpoints de Actuator quedan fuera del prefijo de la API, ya
+> que `ApiConfig` solo aplica ese prefijo a las clases `@RestController` del
+> paquete de la aplicación, y Actuator registra sus endpoints por su propio
+> mecanismo de autoconfiguración. Esto es intencional y es la práctica
+> habitual: los health checks de orquestadores (Docker, Kubernetes) y de
+> balanceadores de carga esperan encontrarlos en una ruta estable y separada
+> de la API de negocio.
 
 Cubierto por test de integración en `ActuatorHealthIntegrationTest`, que
-verifica que `status` es `UP` a nivel global y que el componente `db`
-(la conexión a H2) también reporta `UP`.
+verifica que `status` es `UP` a nivel global y que el componente `db` (la
+conexión a H2) también reporta `UP`. Como la configuración base oculta los
+componentes, el perfil `test` activa `show-details: always` para poder
+comprobarlo.
 
 ## Docker y despliegue
 
@@ -408,7 +440,7 @@ flowchart LR
 - `docker-compose.yml` → orquesta la construcción y el arranque del
   contenedor.
 
-Características del Dockerfile:
+Características del `Dockerfile` y del `docker-compose.yml`:
 
 - **Build multi-stage**: la etapa de compilación usa `amazoncorretto:25`
   completo (incluye JDK + Maven vía `mvnw`); la etapa final usa
@@ -416,9 +448,12 @@ Características del Dockerfile:
   final.
 - **Usuario no-root** (`spring`) para ejecutar la aplicación dentro del
   contenedor, siguiendo buenas prácticas de seguridad.
-- **`HEALTHCHECK` nativo de Docker** apuntando a `/actuator/health`, de forma
-  que `docker ps` y `docker compose` puedan reportar el estado real del
-  servicio, no solo si el proceso sigue vivo.
+- **Healthcheck en `docker-compose.yml`** (no en el `Dockerfile`) apuntando a
+  `/actuator/health`, de forma que `docker compose` pueda reportar el estado
+  real del servicio, no solo si el proceso sigue vivo.
+- **Perfil `dev` activado desde el compose** (`SPRING_PROFILES_ACTIVE`), fuera
+  de la imagen: la misma imagen arrancada sin esa variable usa la
+  configuración base endurecida.
 - **`JAVA_OPTS` configurable** por variable de entorno, para poder ajustar
   memoria (`-Xms`/`-Xmx`) sin reconstruir la imagen.
 
@@ -428,8 +463,10 @@ Uso:
 docker compose up --build
 ```
 
-La aplicación queda expuesta en `http://localhost:8080` igual que en local,
-incluyendo Swagger UI, la consola H2 y `/actuator/health`.
+La aplicación queda expuesta en `http://localhost:8080` con Swagger UI y
+`/actuator/health`. La consola H2 **no** es accesible a través del contenedor:
+H2 solo admite conexiones desde `localhost`, y desde Docker las peticiones
+llegan por la red del contenedor.
 
 > Como la base de datos es H2 en memoria (requisito del enunciado), los datos
 > se reinicializan desde `data.sql` cada vez que se reinicia el contenedor —
@@ -450,10 +487,10 @@ flowchart TD
   subgraph Infra["Tests de adaptadores"]
     T5["PriceEntityMapperTest"]
     T6["PriceResponseMapperTest"]
-    T7["PriceRepositoryH2AdapterTest<br/>(mockea JpaPriceRepository)"]
+    T7["PriceRepositoryJpaAdapterTest<br/>(mockea JpaPriceRepository)"]
   end
   subgraph Integracion["Tests de integración end-to-end"]
-    T8["PriceControllerTest<br/>@SpringBootTest + MockMvc + H2 real"]
+    T8["PriceControllerIntegrationTest<br/>@SpringBootTest + MockMvc + H2 real"]
     T9["ActuatorHealthIntegrationTest<br/>@SpringBootTest + MockMvc"]
   end
 
@@ -470,23 +507,35 @@ incluyendo el health check— está cubierto por tests de integración con
 
 ```
 src/main/java/io/github/emanuelmcp/bcnc_inditex/
-├── config/                      # Configuración transversal (prefijo /api, OpenAPI)
-├── exception/                   # Manejo de errores unificado (@RestControllerAdvice)
+├── common/
+│   ├── domain/
+│   │   └── exception/            # ResourceNotFoundException (base de los "no encontrado", Java puro)
+│   └── infra/
+│       ├── config/               # ApiConfig + ApiProperties (prefijo de la API), OpenApiConfig
+│       └── exception/            # GlobalExceptionHandler + UnifiedErrorResponseDto
 └── price/
     ├── domain/
     │   ├── model/                # Price, Money, ApplicationPeriod
-    │   ├── port/in/               # FindApplicablePriceUseCase, FindApplicablePriceQuery
-    │   ├── port/out/              # PriceRepository
-    │   ├── service/               # PriceResolver
-    │   └── exception/             # PriceNotFoundException
-    ├── application/               # FindApplicablePriceService
+    │   ├── port/in/              # FindApplicablePriceUseCase, FindApplicablePriceQuery
+    │   ├── port/out/             # PriceRepository
+    │   ├── service/              # PriceResolver
+    │   └── exception/            # PriceNotFoundException
+    ├── application/              # FindApplicablePriceService
     └── infra/
-        ├── adapters/in/           # PriceController + DTOs
-        ├── adapters/out/          # JPA entity, repository, adapter H2
-        └── config/                # PriceBeanLoader (wiring manual del dominio)
+        ├── adapters/in/          # PriceController + DTOs
+        ├── adapters/out/         # PriceEntity, JpaPriceRepository, PriceRepositoryJpaAdapter
+        └── config/               # PriceBeanLoader (wiring manual del dominio)
+
+src/main/resources/
+├── application.yaml              # Configuración base (sin perfil, endurecida)
+├── application-dev.yaml          # Perfil dev
+└── data.sql                      # Datos del enunciado
+
+src/test/resources/
+└── application-test.yaml         # Perfil test
 
 Dockerfile             # Imagen Docker multi-stage
-docker-compose.yml     # Orquestación local del contenedor
+docker-compose.yml     # Orquestación local del contenedor (perfil dev, healthcheck)
 ```
 
 ## Decisiones de diseño
