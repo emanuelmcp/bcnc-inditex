@@ -16,7 +16,7 @@ public record Money(BigDecimal amount, Currency currency) {
         amount = toMinorUnitScale(amount, currency);
     }
 
-    private BigDecimal toMinorUnitScale(BigDecimal amount, Currency currency) {
+    private static BigDecimal toMinorUnitScale(BigDecimal amount, Currency currency) {
         int fractionDigits = currency.getDefaultFractionDigits();
         if (fractionDigits < 0) {
             throw new IllegalArgumentException("Currency %s has no minor unit".formatted(currency.getCurrencyCode()));

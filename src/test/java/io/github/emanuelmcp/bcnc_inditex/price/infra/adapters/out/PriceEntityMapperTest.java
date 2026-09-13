@@ -4,6 +4,9 @@ import io.github.emanuelmcp.bcnc_inditex.price.domain.model.ApplicationPeriod;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Money;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
@@ -37,7 +40,7 @@ class PriceEntityMapperTest {
                 .priority(PRIORITY)
                 .price(PRICE)
                 .currency(CURRENCY.getCurrencyCode())
-               .build();
+                .build();
         Price expectedPrice = new Price(
                 BRAND_ID,
                 PRODUCT_ID,
@@ -62,6 +65,24 @@ class PriceEntityMapperTest {
                 .priority(PRIORITY)
                 .price(PRICE)
                 .currency(CURRENCY.getCurrencyCode())
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> sut.toDomain(invalidEntity));
+    }
+
+    @ParameterizedTest(name = "\"{0}\"")
+    @ValueSource(strings = {"EURO", "eur", "XYZ", ""})
+    void shouldPropagateIllegalArgumentExceptionWhenEntityHasInvalidCurrencyCode(String currencyCode) {
+        PriceEntity invalidEntity = PriceEntity.builder()
+                .id(ID)
+                .brandId(BRAND_ID)
+                .startDate(START_DATE)
+                .endDate(END_DATE)
+                .priceList(PRICE_LIST)
+                .productId(PRODUCT_ID)
+                .priority(PRIORITY)
+                .price(PRICE)
+                .currency(currencyCode)
                 .build();
 
         assertThrows(IllegalArgumentException.class, () -> sut.toDomain(invalidEntity));
