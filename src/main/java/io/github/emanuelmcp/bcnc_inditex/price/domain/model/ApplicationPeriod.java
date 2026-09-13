@@ -11,9 +11,4 @@ public record ApplicationPeriod(LocalDateTime start, LocalDateTime end) {
             throw new IllegalArgumentException("Start can not be later than end");
         }
     }
-
-    public boolean contains(LocalDateTime date) {
-        Objects.requireNonNull(date, "Date can not be null");
-        return !date.isBefore(start) && !date.isAfter(end);
-    }
 }

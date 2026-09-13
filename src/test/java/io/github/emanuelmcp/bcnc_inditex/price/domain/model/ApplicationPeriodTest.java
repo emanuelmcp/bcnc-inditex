@@ -35,34 +35,4 @@ class ApplicationPeriodTest {
     void shouldAllowStartEqualsToEnd() {
         assertDoesNotThrow(() -> new ApplicationPeriod(DATE_1, DATE_1));
     }
-
-    @Test
-    void shouldReturnTrueWhenDateIsWithinPeriod() {
-        ApplicationPeriod period = new ApplicationPeriod(DATE_1, DATE_2);
-        assertTrue(period.contains(DATE_1.plusDays(1)));
-    }
-
-    @Test
-    void shouldReturnTrueWhenDateEqualsStart() {
-        ApplicationPeriod period = new ApplicationPeriod(DATE_1, DATE_2);
-        assertTrue(period.contains(DATE_1));
-    }
-
-    @Test
-    void shouldReturnTrueWhenDateEqualsEnd() {
-        ApplicationPeriod period = new ApplicationPeriod(DATE_1, DATE_2);
-        assertTrue(period.contains(DATE_2));
-    }
-
-    @Test
-    void shouldReturnFalseWhenDateIsBeforeStart() {
-        ApplicationPeriod period = new ApplicationPeriod(DATE_1, DATE_2);
-        assertFalse(period.contains(DATE_1.minusNanos(1)));
-    }
-
-    @Test
-    void shouldReturnFalseWhenDateIsAfterEnd() {
-        ApplicationPeriod period = new ApplicationPeriod(DATE_1, DATE_2);
-        assertFalse(period.contains(DATE_2.plusNanos(1)));
-    }
 }
