@@ -74,6 +74,15 @@ class PriceRepositoryJpaAdapterIntegrationTest {
         assertEquals(Optional.of(2), priceListOf(sut.findApplicablePrice(BRAND_ID, PRODUCT_ID, APPLICATION_DATE)));
     }
 
+    @Test
+    void shouldReturnTheLastInsertedPriceWhenPriorityAndStartDateAreTied() {
+        persist(BRAND_ID, PRODUCT_ID, 1, 1, "2020-06-14T00:00:00", "2020-12-31T23:59:59");
+        persist(BRAND_ID, PRODUCT_ID, 2, 1, "2020-06-14T00:00:00", "2020-12-31T23:59:59");
+        persist(BRAND_ID, PRODUCT_ID, 3, 1, "2020-06-14T00:00:00", "2020-12-31T23:59:59");
+
+        assertEquals(Optional.of(3), priceListOf(sut.findApplicablePrice(BRAND_ID, PRODUCT_ID, APPLICATION_DATE)));
+    }
+
     @ParameterizedTest(name = "[{0} - {1}] -> aplica: {2}")
     @CsvSource({
             "2020-06-14T16:00:00, 2020-06-14T18:00:00, true",
