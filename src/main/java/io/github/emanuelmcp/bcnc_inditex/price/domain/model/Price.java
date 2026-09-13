@@ -1,7 +1,5 @@
 package io.github.emanuelmcp.bcnc_inditex.price.domain.model;
 
-import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.Objects;
 
 public record Price(
@@ -22,14 +20,5 @@ public record Price(
         if (priority < 0) {
             throw new IllegalArgumentException("Priority can not be negative");
         }
-    }
-
-    public boolean isApplicableOn(LocalDateTime date) {
-        return applicationPeriod.contains(date);
-    }
-
-    public static Comparator<Price> byApplicationPriority() {
-        return Comparator.comparing(Price::priority)
-                .thenComparing(price -> price.applicationPeriod().start());
     }
 }

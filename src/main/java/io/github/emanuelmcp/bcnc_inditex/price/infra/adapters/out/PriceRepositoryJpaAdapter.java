@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -17,8 +17,8 @@ public class PriceRepositoryJpaAdapter implements PriceRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Price> findCandidates(Integer brandId, Long productId, LocalDateTime applicationDate) {
-        List<PriceEntity> candidates = jpaPriceRepository.findCandidates(brandId, productId, applicationDate);
-        return candidates.stream().map(priceEntityMapper::toDomain).toList();
+    public Optional<Price> findApplicablePrice(Integer brandId, Long productId, LocalDateTime applicationDate) {
+        return jpaPriceRepository.findApplicablePrice(brandId, productId, applicationDate)
+                .map(priceEntityMapper::toDomain);
     }
 }

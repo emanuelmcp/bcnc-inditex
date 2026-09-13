@@ -3,8 +3,8 @@ package io.github.emanuelmcp.bcnc_inditex.price.domain.port.out;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Optional;
 
 public interface PriceRepository {
-    List<Price> findCandidates(Integer brandId, Long productId, LocalDateTime applicationDate);
+    Optional<Price> findApplicablePrice(Integer brandId, Long productId, LocalDateTime applicationDate);
 }

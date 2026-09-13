@@ -65,34 +65,4 @@ class PriceTest {
     void shouldAllowZeroPriority() {
         assertDoesNotThrow(() -> new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, APPLICATION_PERIOD, 0, MONEY));
     }
-
-    @Test
-    void shouldBeApplicableWhenDateIsWithinItsPeriod() {
-        Price price = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, APPLICATION_PERIOD, PRIORITY, MONEY);
-        assertTrue(price.isApplicableOn(APPLICATION_PERIOD.start().plusDays(1)));
-    }
-
-    @Test
-    void shouldNotBeApplicableWhenDateIsOutsideItsPeriod() {
-        Price price = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, APPLICATION_PERIOD, PRIORITY, MONEY);
-        assertFalse(price.isApplicableOn(APPLICATION_PERIOD.end().plusDays(1)));
-    }
-
-    @Test
-    void shouldRankHigherPriorityAbove() {
-        Price lowPriority = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, APPLICATION_PERIOD, 0, MONEY);
-        Price highPriority = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, APPLICATION_PERIOD, 1, MONEY);
-        assertTrue(Price.byApplicationPriority().compare(lowPriority, highPriority) < 0);
-    }
-
-    @Test
-    void shouldBreakPriorityTieByMostRecentStartDate() {
-        ApplicationPeriod earlierPeriod = new ApplicationPeriod(APPLICATION_PERIOD.start(), APPLICATION_PERIOD.end());
-        ApplicationPeriod laterPeriod = new ApplicationPeriod(APPLICATION_PERIOD.start().plusDays(1), APPLICATION_PERIOD.end());
-
-        Price earlierStart = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, earlierPeriod, PRIORITY, MONEY);
-        Price laterStart = new Price(BRAND_ID, PRODUCT_ID, PRICE_LIST, laterPeriod, PRIORITY, MONEY);
-
-        assertTrue(Price.byApplicationPriority().compare(earlierStart, laterStart) < 0);
-    }
 }

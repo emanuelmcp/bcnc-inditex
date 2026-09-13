@@ -5,24 +5,18 @@ import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.port.in.FindApplicablePriceQuery;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.port.in.FindApplicablePriceUseCase;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.port.out.PriceRepository;
-import io.github.emanuelmcp.bcnc_inditex.price.domain.service.PriceResolver;
-
-import java.util.List;
 
 
 public class FindApplicablePriceService implements FindApplicablePriceUseCase {
     private final PriceRepository priceRepository;
-    private final PriceResolver priceResolver;
 
-    public FindApplicablePriceService(PriceRepository priceRepository, PriceResolver priceResolver) {
+    public FindApplicablePriceService(PriceRepository priceRepository) {
         this.priceRepository = priceRepository;
-        this.priceResolver = priceResolver;
     }
 
     @Override
     public Price findApplicablePrice(FindApplicablePriceQuery query) {
-        List<Price> candidates = priceRepository.findCandidates(query.brandId(), query.productId(), query.applicationDate());
-        return priceResolver.resolveApplicablePrice(query.applicationDate(), candidates)
+        return priceRepository.findApplicablePrice(query.brandId(), query.productId(), query.applicationDate())
                 .orElseThrow(
                         () -> new PriceNotFoundException(
                                 query.productId(),

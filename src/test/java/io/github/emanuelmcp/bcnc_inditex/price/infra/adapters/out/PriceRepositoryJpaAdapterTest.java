@@ -12,10 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
-import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,7 +28,8 @@ class PriceRepositoryJpaAdapterTest {
     private static final Long PRODUCT_ID = 1L;
     private static final Integer PRIORITY = 1;
     private static final BigDecimal PRICE = BigDecimal.valueOf(10);
-    private static final Currency CURRENCY = Currency.getInstance("EUR");
+    private static final String CURRENCY_CODE = "EUR";
+    private static final Currency CURRENCY = Currency.getInstance(CURRENCY_CODE);
 
     @Mock
     private JpaPriceRepository jpaPriceRepository;
@@ -44,7 +44,7 @@ class PriceRepositoryJpaAdapterTest {
     }
 
     @Test
-    void shouldFindAndMapEachReturnedEntityToDomainWhenIsPerformed() {
+    void shouldMapTheFoundEntityToDomain() {
         PriceEntity priceEntity = PriceEntity.builder()
                 .id(ID)
                 .brandId(BRAND_ID)
@@ -54,13 +54,13 @@ class PriceRepositoryJpaAdapterTest {
                 .productId(PRODUCT_ID)
                 .priority(PRIORITY)
                 .price(PRICE)
-                .currency(CURRENCY.getCurrencyCode())
+                .currency(CURRENCY_CODE)
                 .build();
+        when(jpaPriceRepository.findApplicablePrice(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
+                .thenReturn(Optional.of(priceEntity));
 
-        when(jpaPriceRepository.findCandidates(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
-                .thenReturn(List.of(priceEntity));
+        Optional<Price> result = sut.findApplicablePrice(BRAND_ID, PRODUCT_ID, APPLICATION_DATE);
 
-        List<Price> result = sut.findCandidates(BRAND_ID, PRODUCT_ID, APPLICATION_DATE);
         Price expectedPrice = new Price(
                 BRAND_ID,
                 PRODUCT_ID,
@@ -69,13 +69,14 @@ class PriceRepositoryJpaAdapterTest {
                 PRIORITY,
                 new Money(PRICE, CURRENCY)
         );
-        assertEquals(List.of(expectedPrice), result);
+        assertEquals(Optional.of(expectedPrice), result);
     }
 
     @Test
-    void shouldReturnEmptyListWhenJpaRepositoryReturnsNoEntities() {
-        when(jpaPriceRepository.findCandidates(anyInt(), anyLong(), any())).thenReturn(List.of());
-        List<Price> result = sut.findCandidates(BRAND_ID, PRODUCT_ID, APPLICATION_DATE);
-        assertTrue(result.isEmpty());
+    void shouldReturnEmptyWhenJpaRepositoryFindsNoEntity() {
+        when(jpaPriceRepository.findApplicablePrice(BRAND_ID, PRODUCT_ID, APPLICATION_DATE))
+                .thenReturn(Optional.empty());
+
+        assertTrue(sut.findApplicablePrice(BRAND_ID, PRODUCT_ID, APPLICATION_DATE).isEmpty());
     }
 }
