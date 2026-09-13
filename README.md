@@ -42,8 +42,8 @@ se devuelve la de mayor `PRIORITY` (mayor valor numérico gana).
 - Base de datos en memoria H2, inicializada al arrancar con los datos del
   ejemplo (`src/main/resources/data.sql`).
 - Tests de integración sobre el endpoint que cubren los 5 casos pedidos en el
-  enunciado, más casos adicionales de robustez (400, 404, 405, 406) y de
-  filtrado por cadena y producto.
+  enunciado, más casos adicionales de robustez (400, 404, 405, 406), de límites
+  de los periodos y de filtrado por cadena y producto.
 
 ## Stack técnico
 
@@ -81,14 +81,14 @@ flowchart TB
 
   subgraph DOMAIN["Dominio (sin frameworks)"]
     UseCasePort["Puerto in:<br/>FindApplicablePriceUseCase"]
-    RepoPort["Puerto out:<br/>PriceRepository"]
-    Resolver["PriceResolver<br/>(regla de negocio: prioridad)"]
+    RepoPort["Puerto out:<br/>PriceRepository<br/>(contrato: tarifa aplicable)"]
     Models["Price / Money / ApplicationPeriod<br/>(records autovalidados)"]
+    Errors["PriceNotFoundException"]
   end
 
   subgraph OUT["Adaptadores de salida (out)"]
     Adapter["PriceRepositoryJpaAdapter"]
-    Jpa["JpaPriceRepository<br/>(Spring Data JPA)"]
+    Jpa["JpaPriceRepository<br/>(consulta JPQL: filtro + prioridad + LIMIT 1)"]
     Entity["PriceEntity"]
     EntityMapper["PriceEntityMapper"]
   end
@@ -100,9 +100,9 @@ flowchart TB
   Controller --> DtoIn
   Controller --> UseCasePort
   UseCasePort -. implementa .-> Service
-  Service --> Resolver
   Service --> RepoPort
-  Resolver --> Models
+  Service --> Errors
+  RepoPort --> Models
   RepoPort -. implementa .-> Adapter
   Adapter --> Jpa
   Adapter --> EntityMapper
@@ -121,9 +121,9 @@ Principios aplicados:
 - **Inversión de dependencias**: el dominio define los puertos
   (`FindApplicablePriceUseCase`, `PriceRepository`); la infraestructura los
   implementa, nunca al revés.
-- **Independencia de framework en el dominio**: `PriceResolver` y
-  `FindApplicablePriceService` se instancian como beans manuales en
-  `PriceConfiguration`, no llevan anotaciones de Spring.
+- **Independencia de framework en dominio y aplicación**: ni `price/domain` ni
+  `price/application` dependen de Spring. `FindApplicablePriceService` no lleva
+  anotaciones y se registra como bean de forma manual en `PriceConfiguration`.
 - **Value Objects inmutables**: `Price`, `Money` y `ApplicationPeriod` son
   `record` de Java con validación de invariantes en el constructor compacto
   (no puede existir un `Money` con importe negativo, ni un `ApplicationPeriod`
@@ -146,9 +146,10 @@ erDiagram
     }
 ```
 
-Índice compuesto `(BRAND_ID, PRODUCT_ID, START_DATE, END_DATE)` para que el
-filtrado por cadena/producto/rango de fechas se resuelva a nivel de base de
-datos y no traiga a memoria más filas de las necesarias.
+Índice compuesto `(BRAND_ID, PRODUCT_ID, START_DATE, END_DATE)` para que la
+consulta de la tarifa aplicable filtre por cadena, producto y rango de fechas
+sobre el índice (comprobado con `EXPLAIN` en H2) y la base de datos devuelva
+una única fila.
 
 ## Flujo de una petición
 
@@ -157,18 +158,15 @@ sequenceDiagram
     actor Client
     participant Controller as PriceController
     participant Service as FindApplicablePriceService
-    participant Resolver as PriceResolver
     participant Repo as PriceRepositoryJpaAdapter
     participant DB as H2 (tabla PRICES)
 
     Client->>Controller: GET /api/v1/prices?applicationDate&productId&brandId
     Controller->>Service: findApplicablePrice(query)
-    Service->>Repo: findCandidates(brandId, productId, applicationDate)
-    Repo->>DB: SELECT ... WHERE brand_id=? AND product_id=?<br/>AND start_date<=? AND end_date>=?
-    DB-->>Repo: filas candidatas (ya acotadas por índice)
-    Repo-->>Service: List<Price> (mapeadas a dominio)
-    Service->>Resolver: resolveApplicablePrice(fecha, candidatos)
-    Resolver-->>Service: Optional<Price> (mayor PRIORITY)
+    Service->>Repo: findApplicablePrice(brandId, productId, applicationDate)
+    Repo->>DB: SELECT ... WHERE brand_id=? AND product_id=?<br/>AND start_date<=? AND end_date>=?<br/>ORDER BY priority DESC, start_date DESC, id DESC<br/>FETCH FIRST 1 ROWS ONLY
+    DB-->>Repo: 0 o 1 fila (acotada por índice)
+    Repo-->>Service: Optional<Price> (mapeada a dominio)
     alt precio encontrado
         Service-->>Controller: Price
         Controller-->>Client: 200 OK + PriceResponseDto
@@ -180,19 +178,35 @@ sequenceDiagram
 
 ## Regla de negocio: resolución de prioridad
 
-La base de datos acota candidatos por eficiencia, pero **la decisión de
-negocio final la toma siempre el dominio**, sin confiar ciegamente en el
-filtrado de persistencia:
+La regla está expresada en el puerto de salida
+`PriceRepository.findApplicablePrice(brandId, productId, applicationDate)`:
+"la tarifa aplicable a ese producto de esa cadena en esa fecha". El adaptador
+JPA la resuelve en una única consulta, de modo que la base de datos devuelve
+como mucho una fila:
+
+```sql
+SELECT p FROM PriceEntity p
+WHERE p.brandId = :brandId
+  AND p.productId = :productId
+  AND p.startDate <= :applicationDate
+  AND p.endDate >= :applicationDate
+ORDER BY p.priority DESC, p.startDate DESC, p.id DESC
+LIMIT 1
+```
 
 ```mermaid
 flowchart LR
-    A["Candidatos devueltos<br/>por PriceRepository"] --> B{"¿La fecha está dentro<br/>de applicationPeriod?"}
+    A["Tarifas de la cadena<br/>y el producto"] --> B{"¿La fecha está dentro<br/>del periodo?<br/>(extremos incluidos)"}
     B -- no --> D["Se descarta"]
-    B -- sí --> C["Se compara por PRIORITY<br/>(mayor gana, y a igualdad<br/>la de inicio más reciente)"]
-    C --> E["max() → Optional&lt;Price&gt;"]
+    B -- sí --> C["Se ordena por mayor PRIORITY,<br/>luego inicio más reciente,<br/>luego mayor id"]
+    C --> E["Primera fila → Optional&lt;Price&gt;"]
     E -- vacío --> F["PriceNotFoundException → 404"]
     E -- presente --> G["200 OK con la tarifa aplicable"]
 ```
+
+Los extremos del periodo (`START_DATE` y `END_DATE`) pertenecen a la tarifa.
+El criterio de desempate cuando coinciden las prioridades es un supuesto propio,
+ya que el enunciado no lo define (ver [Decisiones de diseño](#decisiones-de-diseño)).
 
 ## Endpoint REST
 
@@ -249,9 +263,10 @@ Todos verificados sobre el producto `35455`, cadena `1` (ZARA):
 | 4 | 2020-06-15 10:00            | 3                               | 30.50 € |
 | 5 | 2020-06-16 21:00            | 4                               | 38.95 € |
 
-Implementados como tests de integración en
-`PriceControllerIntegrationTest` y replicados como tests unitarios de dominio en
-`PriceResolverTest` (sin levantar contexto de Spring ni base de datos).
+Implementados como tests de integración end-to-end en
+`PriceControllerIntegrationTest` (MockMvc + H2 con `data.sql`) y replicados a
+nivel de persistencia en `PriceRepositoryJpaAdapterIntegrationTest`
+(`@DataJpaTest` contra H2, sin capa web).
 
 ## Cómo ejecutar el proyecto
 
@@ -345,8 +360,9 @@ refleja el prefijo configurado.
 
 ## Base de datos H2
 
-- URL JDBC: `jdbc:h2:mem:bcnc-db` (los tests usan su propia base,
-  `jdbc:h2:mem:bcnc-test-db`)
+- URL JDBC: `jdbc:h2:mem:bcnc-db`. Los tests `@SpringBootTest` usan su propia
+  base, `jdbc:h2:mem:bcnc-test-db`, y los `@DataJpaTest` una base embebida
+  aislada.
 - Usuario: `sa` — Password: *(vacío)*
 - Consola web: `http://localhost:8080/h2`, **solo con el perfil `dev` y solo
   desde `localhost`**. H2 rechaza las conexiones remotas (`web-allow-others`
@@ -484,31 +500,36 @@ llegan por la red del contenedor.
 flowchart TD
   subgraph Dominio["Tests unitarios de dominio (sin Spring)"]
     T1["PriceTest / MoneyTest / ApplicationPeriodTest"]
-    T2["PriceResolverTest"]
-    T3["FindApplicablePriceQueryTest"]
+    T2["FindApplicablePriceQueryTest"]
   end
   subgraph Aplicacion["Tests de aplicación (Mockito)"]
-    T4["FindApplicablePriceServiceTest<br/>(mockea PriceRepository)"]
+    T3["FindApplicablePriceServiceTest<br/>(mockea PriceRepository)"]
   end
   subgraph Infra["Tests de adaptadores"]
-    T5["PriceEntityMapperTest"]
-    T6["PriceResponseMapperTest"]
+    T4["PriceEntityMapperTest"]
+    T5["PriceResponseMapperTest"]
+    T6["ApplicationDateFormatterTest"]
     T7["PriceRepositoryJpaAdapterTest<br/>(mockea JpaPriceRepository)"]
-    T10["PriceRepositoryJpaAdapterIntegrationTest<br/>@DataJpaTest + H2 real (consulta JPQL)"]
+    T8["PriceRepositoryJpaAdapterIntegrationTest<br/>@DataJpaTest + H2 real<br/>(prioridad, desempates y límites)"]
   end
   subgraph Integracion["Tests de integración end-to-end"]
-    T8["PriceControllerIntegrationTest<br/>@SpringBootTest + MockMvc + H2 real"]
-    T9["ActuatorHealthIntegrationTest<br/>@SpringBootTest + MockMvc"]
+    T9["PriceControllerIntegrationTest<br/>@SpringBootTest + MockMvc + H2 real"]
+    T10["ActuatorHealthIntegrationTest<br/>@SpringBootTest + MockMvc"]
   end
 
   Dominio --> Aplicacion --> Infra --> Integracion
 ```
 
-La lógica de negocio (resolución de prioridad, invariantes de los Value
-Objects) está cubierta por tests unitarios puros que no dependen de Spring ni
-de una base de datos; el comportamiento HTTP observable end-to-end —
-incluyendo el health check— está cubierto por tests de integración con
-`MockMvc`.
+Los invariantes de los Value Objects están cubiertos por tests unitarios puros
+que no dependen de Spring ni de una base de datos. La regla de resolución de
+prioridad, que vive en la consulta, se prueba contra H2 real con
+`@DataJpaTest`: cada test inserta sus propias tarifas en una base embebida
+aislada y comprueba prioridad, desempates y límites de los periodos. El
+comportamiento HTTP observable end-to-end —incluyendo el health check— está
+cubierto por tests de integración con `MockMvc`, sobre `data.sql` más las
+tarifas "trampa" de `test-prices.sql` (otra cadena y otro producto con
+prioridad 99), que verifican que solo se tienen en cuenta las tarifas de la
+cadena y el producto pedidos.
 
 ## Estructura del proyecto
 
@@ -525,13 +546,12 @@ src/main/java/io/github/emanuelmcp/bcnc_inditex/
     │   ├── model/                # Price, Money, ApplicationPeriod
     │   ├── port/in/              # FindApplicablePriceUseCase, FindApplicablePriceQuery
     │   ├── port/out/             # PriceRepository
-    │   ├── service/              # PriceResolver
     │   └── exception/            # PriceNotFoundException
     ├── application/              # FindApplicablePriceService
     └── infra/
-        ├── adapters/in/          # PriceController + DTOs
-        ├── adapters/out/         # PriceEntity, JpaPriceRepository, PriceRepositoryJpaAdapter
-        └── config/               # PriceConfiguration (wiring manual del dominio)
+        ├── adapters/in/          # PriceController, ApplicationDateFormatter, PriceControllerBindingAdvice + DTOs
+        ├── adapters/out/         # PriceEntity, PriceEntityMapper, JpaPriceRepository, PriceRepositoryJpaAdapter
+        └── config/               # PriceConfiguration (wiring manual del caso de uso)
 
 src/main/resources/
 ├── application.yaml              # Configuración base (sin perfil, endurecida)
@@ -542,28 +562,40 @@ src/test/resources/
 ├── application-test.yaml         # Perfil test
 └── test-prices.sql               # Tarifas "trampa" de otra cadena y otro producto (solo tests)
 
-Dockerfile             # Imagen Docker multi-stage
-docker-compose.yml     # Orquestación local del contenedor (perfil dev, healthcheck)
+.github/workflows/ci.yml  # CI: build, tests e imagen Docker
+Dockerfile                # Imagen Docker multi-stage
+docker-compose.yml        # Orquestación local del contenedor (perfil dev, healthcheck)
 ```
 
 ## Decisiones de diseño
 
-- **Doble validación de fechas (BD + dominio)**: la consulta JPA acota por
-  rango de fechas usando el índice compuesto (eficiencia), pero
-  `PriceResolver` vuelve a validar `isApplicableOn` en memoria. Así el
-  dominio no depende de que el adaptador de persistencia filtre
-  correctamente; la regla de negocio es autocontenida y se puede testear sin
-  base de datos.
-- **`Money` normaliza la escala del `BigDecimal` en su constructor
-  compacto** (`setScale(2, RoundingMode.UNNECESSARY)`), evitando el clásico
-  problema de `BigDecimal.equals()` siendo sensible a la escala
-  (`10.0` ≠ `10.00` con `equals()`, pero sí son el mismo importe de negocio).
-- **Un único resultado garantizado por construcción**: `PriceResolver` usa
-  `Stream.max(...)` sobre el comparador de prioridad, que devuelve como mucho
-  un `Optional<Price>`; nunca puede haber ambigüedad en la respuesta.
-- **Beans de dominio cableados manualmente** (`PriceConfiguration`) en lugar de
-  `@Service`/`@Component` sobre las clases de dominio, para que el paquete
-  `domain` no tenga ninguna dependencia de Spring.
+- **Resolución de la tarifa en la consulta**: el puerto
+  `PriceRepository.findApplicablePrice` expresa el contrato de negocio ("la
+  tarifa aplicable en esa fecha") y el adaptador JPA lo resuelve con una sola
+  consulta: filtra por cadena, producto y fecha, ordena por `PRIORITY`
+  descendente y devuelve como mucho una fila (`LIMIT 1`) apoyándose en el
+  índice compuesto. Se descartó resolver la prioridad en memoria para no traer
+  filas innecesarias. El dominio define qué necesita y la infraestructura
+  decide cómo obtenerlo, así que las dependencias siguen apuntando hacia el
+  dominio. La regla está cubierta por `PriceRepositoryJpaAdapterIntegrationTest`
+  contra H2.
+- **Desempate determinista**: el enunciado no define qué ocurre si dos tarifas
+  con la misma prioridad se solapan. Se asume que gana la de inicio más
+  reciente y, si también coincide, la última insertada (`id`), para que la
+  respuesta sea siempre la misma.
+- **Un único resultado**: la consulta devuelve como mucho una fila y el puerto
+  devuelve `Optional<Price>`; junto con el desempate, la respuesta nunca es
+  ambigua.
+- **`Money` normaliza la escala del `BigDecimal` a los decimales de su
+  divisa** (`Currency.getDefaultFractionDigits()` con
+  `RoundingMode.UNNECESSARY`): `35.5 EUR` queda como `35.50`, y un importe con
+  más decimales de los que admite la divisa se rechaza en lugar de redondearse
+  en silencio. Evita además el clásico problema de `BigDecimal.equals()` siendo
+  sensible a la escala (`10.0` ≠ `10.00` con `equals()`, pero sí son el mismo
+  importe de negocio).
+- **Caso de uso cableado manualmente** (`PriceConfiguration`) en lugar de
+  `@Service`/`@Component`, para que ni `domain` ni `application` tengan
+  ninguna dependencia de Spring.
 - **Actuator separado de `/api`**: los endpoints de monitorización no
   comparten prefijo con la API de negocio, para que orquestadores y
   balanceadores puedan apuntar a una ruta de health check estable e
