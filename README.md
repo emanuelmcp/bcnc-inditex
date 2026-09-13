@@ -80,7 +80,7 @@ flowchart TB
   end
 
   subgraph DOMAIN["Dominio (sin frameworks)"]
-    UseCasePort["Puerto in:<br/>FindApplicablePriceUseCase"]
+    UseCasePort["Puerto in:<br/>FindApplicablePriceUseCase<br/>+ FindApplicablePriceQuery"]
     RepoPort["Puerto out:<br/>PriceRepository<br/>(contrato: tarifa aplicable)"]
     Models["Price / Money / ApplicationPeriod<br/>(records autovalidados)"]
     Errors["PriceNotFoundException"]
@@ -125,26 +125,35 @@ Principios aplicados:
   `price/application` dependen de Spring. `FindApplicablePriceService` no lleva
   anotaciones y se registra como bean de forma manual en `PriceConfiguration`.
 - **Value Objects inmutables**: `Price`, `Money` y `ApplicationPeriod` son
-  `record` de Java con validación de invariantes en el constructor compacto
-  (no puede existir un `Money` con importe negativo, ni un `ApplicationPeriod`
-  con `start > end`).
+  `record` de Java con validación de invariantes en el constructor compacto:
+  no puede existir un `Money` con importe negativo o con más decimales de los
+  que admite su divisa, un `ApplicationPeriod` con `start > end` ni un `Price`
+  con prioridad negativa.
+- **Consulta de entrada autovalidada**: `FindApplicablePriceQuery` es también
+  un `record`; exige los tres parámetros y trunca la fecha a segundos.
 
 ## Modelo de datos
 
 ```mermaid
 erDiagram
     PRICES {
-        bigint ID PK
+        bigint ID PK "IDENTITY"
         int BRAND_ID
-        timestamp START_DATE
-        timestamp END_DATE
+        timestamp START_DATE "TIMESTAMP(6)"
+        timestamp END_DATE "TIMESTAMP(6)"
         int PRICE_LIST
         bigint PRODUCT_ID
         int PRIORITY
-        decimal PRICE
-        varchar CURR
+        decimal PRICE "NUMERIC(19,4)"
+        varchar CURR "VARCHAR(3), ISO 4217"
     }
 ```
+
+El esquema lo genera Hibernate a partir de `PriceEntity`
+(`ddl-auto: create-drop`); no hay `schema.sql`. Todas las columnas son
+`NOT NULL` y no hay restricciones `CHECK`: los invariantes (prioridad no
+negativa, periodo coherente, divisa válida y sus decimales) los garantiza el
+dominio al mapear la fila (ver [Decisiones de diseño](#decisiones-de-diseño)).
 
 Índice compuesto `(BRAND_ID, PRODUCT_ID, START_DATE, END_DATE)` para que la
 consulta de la tarifa aplicable filtre por cadena, producto y rango de fechas
@@ -204,9 +213,10 @@ flowchart LR
     E -- presente --> G["200 OK con la tarifa aplicable"]
 ```
 
-Los extremos del periodo (`START_DATE` y `END_DATE`) pertenecen a la tarifa.
-El criterio de desempate cuando coinciden las prioridades es un supuesto propio,
-ya que el enunciado no lo define (ver [Decisiones de diseño](#decisiones-de-diseño)).
+Los extremos del periodo (`START_DATE` y `END_DATE`) pertenecen a la tarifa,
+con precisión de segundos. El criterio de desempate cuando coinciden las
+prioridades es un supuesto propio, ya que el enunciado no lo define (ver
+[Decisiones de diseño](#decisiones-de-diseño)).
 
 ## Endpoint REST
 
@@ -218,9 +228,9 @@ GET /api/v1/prices?applicationDate={yyyy-MM-dd'T'HH:mm:ss}&productId={long}&bran
 
 | Parámetro        | Tipo             | Obligatorio | Ejemplo               |
 |-------------------|------------------|:-----------:|------------------------|
-| `applicationDate` | `LocalDateTime` (`yyyy-MM-dd'T'HH:mm:ss`, sin zona horaria) | Sí | `2020-06-14T16:00:00` |
-| `productId`       | `Long`           | Sí          | `35455`               |
-| `brandId`         | `Integer`        | Sí          | `1`                   |
+| `applicationDate` | `LocalDateTime` (exactamente `yyyy-MM-dd'T'HH:mm:ss`: sin fracciones de segundo ni zona horaria) | Sí | `2020-06-14T16:00:00` |
+| `productId`       | `Long` positivo  | Sí          | `35455`               |
+| `brandId`         | `Integer` positivo | Sí        | `1`                   |
 
 > **Supuesto sobre la zona horaria**: la tabla `PRICES` guarda las fechas sin
 > zona horaria, así que `applicationDate` se interpreta en esa misma hora local.
@@ -245,11 +255,23 @@ GET /api/v1/prices?applicationDate={yyyy-MM-dd'T'HH:mm:ss}&productId={long}&bran
 
 | Código | Motivo                                              |
 |--------|------------------------------------------------------|
-| 400    | Falta un parámetro obligatorio, tiene un tipo inválido, la fecha no es una fecha-hora local válida (por ejemplo, porque incluye zona horaria) o `productId`/`brandId` no es positivo |
-| 404    | No existe ninguna tarifa aplicable para esos parámetros |
-| 405    | Método distinto de `GET` |
+| 400    | Falta un parámetro obligatorio (o llega vacío), tiene un tipo inválido, la fecha no sigue exactamente `yyyy-MM-dd'T'HH:mm:ss` (fracciones de segundo, zona horaria…) o no existe (`2020-02-30T16:00:00`), o `productId`/`brandId` no es positivo |
+| 404    | No existe ninguna tarifa aplicable para esos parámetros, o la ruta no existe |
+| 405    | Método distinto de `GET` (con cabecera `Allow`) |
 | 406    | El cliente no acepta JSON (`Accept`); el error se devuelve igualmente en JSON |
-| 500    | Error interno no controlado                          |
+| 500    | Error interno no controlado, incluida una tarifa aplicable que viole los invariantes del dominio (ver [Decisiones de diseño](#decisiones-de-diseño)) |
+
+Ejemplo de error (`404`):
+
+```json
+{
+  "timestamp": "2026-09-12T10:15:30",
+  "status": 404,
+  "error": "Not Found",
+  "message": "No applicable price found for product 35455, brand 1 at date 2019-01-01T10:00",
+  "path": "/api/v1/prices"
+}
+```
 
 ## Casos de prueba del enunciado
 
@@ -347,6 +369,23 @@ enunciado. El esquema se crea con `ddl-auto: create-drop` y `data.sql` se carga
 en cada arranque, de modo que los datos se reinician siempre desde el juego de
 datos del ejemplo.
 
+La conexión se declara con variables de entorno cuyo valor por defecto es esa
+base en memoria:
+
+| Variable | Valor por defecto |
+|---|---|
+| `DB_URL` | `jdbc:h2:mem:bcnc-db` |
+| `DB_USERNAME` | `sa` |
+| `DB_PASSWORD` | *(vacío)* |
+| `DB_DRIVER` | `org.h2.Driver` |
+
+Ninguna forma de arranque del proyecto (Maven, Docker Compose, CI) las define,
+así que siempre se usa H2 en memoria. No están pensadas para apuntar a otra
+base: H2 es el único driver incluido y, con `create-drop` y
+`spring.sql.init.mode: always`, una base persistente vería la tabla `PRICES`
+borrada y recreada en cada arranque (y borrada al parar), con `data.sql`
+insertado de nuevo.
+
 Además, `spring.jpa.open-in-view` está explícitamente a `false`. Es lo
 correcto en una API REST —no hay renderizado de vistas que necesite la sesión
 de persistencia abierta— y elimina el aviso que Spring Boot emite al arrancar.
@@ -360,9 +399,9 @@ refleja el prefijo configurado.
 
 ## Base de datos H2
 
-- URL JDBC: `jdbc:h2:mem:bcnc-db`. Los tests `@SpringBootTest` usan su propia
-  base, `jdbc:h2:mem:bcnc-test-db`, y los `@DataJpaTest` una base embebida
-  aislada.
+- URL JDBC: `jdbc:h2:mem:bcnc-db` (valor por defecto de `DB_URL`). Todos los
+  tests `@SpringBootTest` comparten otra base, `jdbc:h2:mem:bcnc-test-db`, y
+  los `@DataJpaTest` usan una base embebida aislada.
 - Usuario: `sa` — Password: *(vacío)*
 - Consola web: `http://localhost:8080/h2`, **solo con el perfil `dev` y solo
   desde `localhost`**. H2 rechaza las conexiones remotas (`web-allow-others`
@@ -380,6 +419,10 @@ deshabilitada (`springdoc.api-docs.enabled=false`,
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Especificación OpenAPI: `http://localhost:8080/v3/api-docs`
+
+La especificación documenta las respuestas `200`, `400` y `404` del endpoint,
+con sus esquemas. Los `405`, `406` y `500` los produce el manejador global de
+errores con el mismo formato (ver [Endpoint REST](#endpoint-rest)).
 
 ## Observabilidad: Actuator
 
@@ -439,9 +482,9 @@ comprobarlo.
 
 ## Docker y despliegue
 
-El proyecto incluye una imagen Docker de dos etapas (*multi-stage build*)
-para minimizar el tamaño final de la imagen y no distribuir el JDK completo
-ni el código fuente en producción.
+El proyecto incluye una imagen Docker de dos etapas (*multi-stage build*): la
+compilación (código fuente, Maven y dependencias) se queda en la primera etapa
+y la imagen final solo añade el `.jar` ejecutable.
 
 ```mermaid
 flowchart LR
@@ -465,9 +508,14 @@ flowchart LR
 Características del `Dockerfile` y del `docker-compose.yml`:
 
 - **Build multi-stage**: la etapa de compilación usa `amazoncorretto:25`
-  completo (incluye JDK + Maven vía `mvnw`); la etapa final usa
-  `amazoncorretto:25-alpine`, mucho más ligera, y solo contiene el `.jar`
-  final.
+  (Amazon Linux con JDK) e instala `unzip`, `tar` y `gzip` para que `mvnw`
+  pueda descargar Maven. Las dependencias se resuelven en un paso previo
+  (`dependency:go-offline`) con caché de BuildKit (`--mount=type=cache`), y el
+  empaquetado usa `-DskipTests`: en CI, la construcción de la imagen solo se
+  lanza después de que `./mvnw verify` haya pasado.
+- **Imagen final sobre Alpine** (`amazoncorretto:25-alpine`), que solo añade el
+  `.jar`: no lleva el código fuente, Maven ni la caché de dependencias. Esa
+  variante de Corretto es un JDK completo, no un JRE.
 - **Usuario no-root** (`spring`) para ejecutar la aplicación dentro del
   contenedor, siguiendo buenas prácticas de seguridad.
 - **Healthcheck en `docker-compose.yml`** (no en el `Dockerfile`) apuntando a
@@ -586,6 +634,14 @@ docker-compose.yml        # Orquestación local del contenedor (perfil dev, heal
 - **Un único resultado**: la consulta devuelve como mucho una fila y el puerto
   devuelve `Optional<Price>`; junto con el desempate, la respuesta nunca es
   ambigua.
+- **Prioridad no negativa**: el enunciado solo dice que gana el mayor valor
+  numérico. Se asume que `PRIORITY` no es negativa (los datos del ejemplo usan
+  `0` y `1`) y `Price` lo valida; el esquema no lo restringe.
+- **Precisión de segundos**: los datos del ejemplo están expresados en
+  segundos. El endpoint exige exactamente `yyyy-MM-dd'T'HH:mm:ss` y rechaza
+  fracciones de segundo con `400`; además, `FindApplicablePriceQuery` trunca a
+  segundos cualquier fecha que reciba, para que el caso de uso aplique la misma
+  precisión aunque se invoque desde otro adaptador.
 - **`Money` normaliza la escala del `BigDecimal` a los decimales de su
   divisa** (`Currency.getDefaultFractionDigits()` con
   `RoundingMode.UNNECESSARY`): `35.5 EUR` queda como `35.50`, y un importe con
@@ -593,6 +649,12 @@ docker-compose.yml        # Orquestación local del contenedor (perfil dev, heal
   en silencio. Evita además el clásico problema de `BigDecimal.equals()` siendo
   sensible a la escala (`10.0` ≠ `10.00` con `equals()`, pero sí son el mismo
   importe de negocio).
+- **Datos inconsistentes en `PRICES`**: si la tarifa aplicable viola un
+  invariante del dominio (prioridad negativa, inicio posterior al fin, divisa
+  desconocida o más decimales de los que admite la divisa), el mapeo a dominio
+  falla y la API responde `500`: se prefiere no servir un precio dudoso a
+  corregirlo en silencio. Como la consulta solo trae la fila ganadora, una fila
+  inválida solo afecta a las peticiones en las que sería la tarifa aplicable.
 - **Caso de uso cableado manualmente** (`PriceConfiguration`) en lugar de
   `@Service`/`@Component`, para que ni `domain` ni `application` tengan
   ninguna dependencia de Spring.
