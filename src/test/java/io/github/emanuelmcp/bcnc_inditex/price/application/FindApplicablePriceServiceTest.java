@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Currency;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,7 +29,7 @@ class FindApplicablePriceServiceTest {
     private static final Long PRODUCT_ID = 35455L;
     private static final Integer PRICE_LIST = 1;
     private static final BigDecimal AMOUNT = BigDecimal.valueOf(35.50);
-    private static final String CURRENCY = "EUR";
+    private static final Currency CURRENCY = Currency.getInstance("EUR");
     private static final Integer PRIORITY = 0;
     private static final LocalDateTime APPLICATION_DATE = LocalDateTime.of(2020, 6, 14, 10, 0, 0);
     private static final FindApplicablePriceQuery QUERY = new FindApplicablePriceQuery(BRAND_ID, PRODUCT_ID, APPLICATION_DATE);

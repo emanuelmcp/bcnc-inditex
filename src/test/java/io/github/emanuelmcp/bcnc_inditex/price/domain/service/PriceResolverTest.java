@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 
@@ -98,7 +99,7 @@ class PriceResolverTest {
                 PRODUCT_ID,
                 priceList,
                 new ApplicationPeriod(parseDateFromRawData(start), parseDateFromRawData(end)), priority,
-                new Money(new BigDecimal(amount), "EUR")
+                new Money(new BigDecimal(amount), Currency.getInstance("EUR"))
         );
     }
     private static LocalDateTime parseDateFromRawData(String date) {

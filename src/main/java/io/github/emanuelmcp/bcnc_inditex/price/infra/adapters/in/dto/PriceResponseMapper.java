@@ -13,7 +13,7 @@ public class PriceResponseMapper {
                 price.applicationPeriod().start(),
                 price.applicationPeriod().end(),
                 price.money().amount(),
-                price.money().currency()
+                price.money().currency().getCurrencyCode()
         );
     }
 }

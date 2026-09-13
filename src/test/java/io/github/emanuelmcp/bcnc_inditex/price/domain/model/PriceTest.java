@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Currency;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -16,7 +17,7 @@ class PriceTest {
             LocalDateTime.of(2026, 6, 18, 10, 35)
     );
     private static final Integer PRIORITY = 1;
-    private static final Money MONEY = new Money(BigDecimal.valueOf(10), "EUR");
+    private static final Money MONEY = new Money(BigDecimal.valueOf(10), Currency.getInstance("EUR"));
 
     @Test
     void shouldCreatePriceWhenDataIsCorrect() {

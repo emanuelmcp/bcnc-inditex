@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Currency;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,7 +21,7 @@ class PriceResponseMapperTest {
     private static final Integer PRIORITY = 1;
     private static final BigDecimal PRICE = BigDecimal.valueOf(10);
     private static final BigDecimal EXPECTED_PRICE = PRICE.setScale(2, RoundingMode.UNNECESSARY);
-    private static final String CURRENCY = "EUR";
+    private static final Currency CURRENCY = Currency.getInstance("EUR");
 
     private final PriceResponseMapper sut = new PriceResponseMapper();
 
@@ -34,7 +35,7 @@ class PriceResponseMapperTest {
                 PRIORITY,
                 new Money(PRICE, CURRENCY)
         );
-        PriceResponseDto expectedDto = new PriceResponseDto(PRODUCT_ID, BRAND_ID, PRICE_LIST, START_DATE, END_DATE, EXPECTED_PRICE, CURRENCY);
+        PriceResponseDto expectedDto = new PriceResponseDto(PRODUCT_ID, BRAND_ID, PRICE_LIST, START_DATE, END_DATE, EXPECTED_PRICE, CURRENCY.getCurrencyCode());
 
         PriceResponseDto result = sut.toResponse(price);
 

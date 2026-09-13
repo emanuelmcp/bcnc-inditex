@@ -42,7 +42,7 @@ public class PriceEntity {
     @Column(name = "PRIORITY", nullable = false)
     private Integer priority;
 
-    @Column(name = "PRICE", nullable = false, precision = 10, scale = 2)
+    @Column(name = "PRICE", nullable = false, precision = 19, scale = 4)
     private BigDecimal price;
 
     @Column(name = "CURR", nullable = false, length = 3)

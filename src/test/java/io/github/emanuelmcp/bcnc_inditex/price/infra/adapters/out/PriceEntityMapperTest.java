@@ -6,6 +6,7 @@ import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Currency;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,7 +20,7 @@ class PriceEntityMapperTest {
     private static final Long PRODUCT_ID = 1L;
     private static final Integer PRIORITY = 1;
     private static final BigDecimal PRICE = BigDecimal.valueOf(10);
-    private static final String CURRENCY = "EUR";
+    private static final Currency CURRENCY = Currency.getInstance("EUR");
 
     private final PriceEntityMapper sut = new PriceEntityMapper();
 
@@ -35,7 +36,7 @@ class PriceEntityMapperTest {
                 .productId(PRODUCT_ID)
                 .priority(PRIORITY)
                 .price(PRICE)
-                .currency(CURRENCY)
+                .currency(CURRENCY.getCurrencyCode())
                .build();
         Price expectedPrice = new Price(
                 BRAND_ID,
@@ -60,7 +61,7 @@ class PriceEntityMapperTest {
                 .productId(PRODUCT_ID)
                 .priority(PRIORITY)
                 .price(PRICE)
-                .currency(CURRENCY)
+                .currency(CURRENCY.getCurrencyCode())
                 .build();
 
         assertThrows(IllegalArgumentException.class, () -> sut.toDomain(invalidEntity));

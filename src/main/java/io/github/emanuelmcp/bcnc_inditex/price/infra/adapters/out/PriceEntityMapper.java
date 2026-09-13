@@ -5,6 +5,8 @@ import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Money;
 import io.github.emanuelmcp.bcnc_inditex.price.domain.model.Price;
 import org.springframework.stereotype.Component;
 
+import java.util.Currency;
+
 @Component
 public class PriceEntityMapper {
     public Price toDomain(PriceEntity entity) {
@@ -23,6 +25,6 @@ public class PriceEntityMapper {
     }
 
     private Money buildMoney(PriceEntity entity) {
-        return new Money(entity.getPrice(), entity.getCurrency());
+        return new Money(entity.getPrice(), Currency.getInstance(entity.getCurrency()));
     }
 }
